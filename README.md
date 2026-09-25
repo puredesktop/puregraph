@@ -31,7 +31,7 @@ The SVG export dependency `cytoscape-svg` is GPL-3.0 licensed. The MIT license c
 
 | Project / source | Homepage or documentation | Support the maintainers |
 | --- | --- | --- |
-| [cytoscape/cytoscape](https://github.com/cytoscape/cytoscape) | [Project home](https://github.com/cytoscape/cytoscape) | — |
+| [cytoscape/cytoscape.js](https://github.com/cytoscape/cytoscape.js) | [Homepage / docs](https://js.cytoscape.org) | — |
 | [kinimesi/cytoscape-svg](https://github.com/kinimesi/cytoscape-svg) | [Homepage / docs](https://kinimesi.github.io/cytoscape-svg) | — |
 | [react/react](https://github.com/react/react) | [Homepage / docs](https://react.dev) | — |
 | [styled-components/styled-components](https://github.com/styled-components/styled-components) | [Homepage / docs](https://styled-components.com) | [GitHub Sponsors](https://github.com/sponsors/quantizor) · [Open Collective](https://opencollective.com/styled-components) |
