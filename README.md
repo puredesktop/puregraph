@@ -2,15 +2,53 @@
 
 # puregraph
 
-## App documentation
+## What puregraph does
 
-Build and explore network diagrams from JSON, CSV, or TSV data.
+A network-diagram workspace for importing connected data, inspecting relationships, choosing layouts, and styling nodes and edges. Save the editable graph or export a diagram for other people to explore.
+
+## App layout
+
+| Area | What you use it for |
+| --- | --- |
+| **Graph canvas** | Select nodes and edges, navigate the network, and inspect a layout. |
+| **Data panel** | Import and review node and edge data from JSON, CSV, or TSV. |
+| **Explore and style panels** | Find connections and paths; choose visual encodings and style presets. |
+| **Review and export** | Review proposed graph changes and export static or interactive outputs. |
+
+The app also uses the shared [puredesktop](https://puredesktop.ai) shell and drawer agent. Panels can vary with the current view and selection.
+
+## Getting started
 
 1. Create a graph and import node and edge data.
 2. Inspect nodes and connections, then choose a layout and adjust their styling.
 3. Save the editable `.graph` document and use export controls when sharing a diagram.
 
-Read the [app guide](docs/app-guide.md) for usage and development requirements. This app runs within [puredesktop](https://puredesktop.ai).
+Read the [app guide](docs/app-guide.md) for development, loading, and source-layout details.
+
+## Develop and customize
+
+You can develop this app outside [puredesktop](https://puredesktop.ai), using your preferred editor, terminal, and coding tools, then load the module into [puredesktop](https://puredesktop.ai) to use and test it. You can also change your local version from **purefactory** or through **the app’s drawer agent**.
+
+### Use your own development tools
+
+1. Fork or clone this repository and work on a local copy in your editor.
+2. Set up the app’s dependencies and run its development server or build. See the [app guide](docs/app-guide.md#development-and-loading) for this repository’s requirements and scripts.
+3. Load the module into [puredesktop](https://puredesktop.ai). For a local web development server, the platform guide describes **File → Register App…**: register its URL, app name, and required permissions, then open it from **Browse Apps**. Keep the development server running while using that entry point.
+4. Make changes in your editor, reload the app as needed, and test its file, account, and agent integrations inside the desktop. A distributable `.pureapp` package can be loaded through **File → Install App…**.
+
+See the [app development and integration guide](https://puredesktop.ai/docs/apps/) for registration, the app manifest, the bridge, and packaging. Editing outside the desktop does not remove this module’s shared-dependency requirements.
+
+### Use purefactory or the app’s drawer agent
+
+Open your local app project in **purefactory** to develop it there, or open the app’s **drawer agent** and describe the change you want to make to your local version. Specify whether you want to change the app itself or work on the document or data currently open. Review the resulting source changes, run the relevant checks, and reload your local app to try them. You can keep the changes for yourself, develop a fork, or contribute them back with a pull request.
+
+## Developer accounts and the marketplace
+
+[Create a developer account on puredesktop.ai](https://puredesktop.ai/developers) to take part in the developer community and submit apps for review. We welcome contributions to this app, forks that take it in a different direction, and entirely new apps to offer on [puredesktop](https://puredesktop.ai).
+
+We welcome **open-source and proprietary projects alike** to the [puredesktop](https://puredesktop.ai) marketplace. A marketplace with support for **paid apps is coming soon**, so developers will be able to charge for their apps if they choose. When distributing a fork, follow the licenses of the code and dependencies you use.
+
+For more information about developer accounts, app submissions, or the upcoming marketplace, contact [info@puredesktop.ai](mailto:info@puredesktop.ai).
 
 ## Open source and contributions
 
