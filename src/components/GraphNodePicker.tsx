@@ -1,0 +1,7 @@
+import { useId, useState } from 'react'
+import type { GraphElement } from '../lib/graphParser'
+export function GraphNodePicker({ label, value, onChange, elements }: { label: string; value: string; onChange: (id: string) => void; elements: GraphElement[] }) {
+  const id = useId(), [open, setOpen] = useState(false)
+  const nodes = elements.filter(element => element.data.source === undefined && `${element.data.id} ${element.data.label}`.toLowerCase().includes(value.toLowerCase())).slice(0, 20)
+  return <label>{label}<input role="combobox" aria-label={label} aria-expanded={open} aria-controls={id} value={value} placeholder="Search a name or ID" onFocus={() => setOpen(true)} onChange={event => { onChange(event.target.value); setOpen(true) }} onKeyDown={event => { if (event.key === 'Escape') setOpen(false); if (event.key === 'Enter' && nodes.length === 1) { event.preventDefault(); onChange(nodes[0].data.id!); setOpen(false) } }} onBlur={() => setOpen(false)} />{open && <div id={id} role="listbox" aria-label={`${label} matches`} style={{ maxHeight: 160, overflow: 'auto', display: 'grid', gap: 4 }}>{nodes.map(node => <button type="button" role="option" aria-selected={value === node.data.id} key={node.data.id} onMouseDown={event => event.preventDefault()} onClick={() => { onChange(node.data.id!); setOpen(false) }}>{String(node.data.label || node.data.id)} · {node.data.id}</button>)}</div>}</label>
+}

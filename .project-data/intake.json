@@ -1,0 +1,8 @@
+{
+  "appNames": [
+    "PureGraph"
+  ],
+  "idea": "Build, inspect, style, and export network diagrams from JSON, CSV, or TSV data.",
+  "questions": [],
+  "selectedAppName": "PureGraph"
+}
