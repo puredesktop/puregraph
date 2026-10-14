@@ -1,4 +1,5 @@
 import styled from 'styled-components'
+import { enterprise } from '../enterpriseLook'
 
 /** Consistent form rhythm for PureGraph's inspectors, using platform tokens. */
 export const GraphPanel = styled.section`
@@ -33,6 +34,12 @@ export const GraphPanel = styled.section`
   input[aria-invalid=true] { border-color: #b34a3e; }
   [role=alert] { color: #a03930; overflow-wrap: anywhere; }
   [role=status]:empty { display: none; }
+
+  ${enterprise} & {
+    h2 { font-size: 14px; font-weight: 600; }
+    input:not([type=checkbox]):not([type=color]), textarea, button { border-radius: var(--pure-chrome-radius, 3px); }
+    input::file-selector-button { border-radius: 2px; }
+  }
 `
 
 export const ControlRow = styled.div`
