@@ -7,8 +7,10 @@ import type { GraphDocument } from '../lib/graphDocument'
 import { DEFAULT_GRAPH_STYLE, normalizeGraphStyle } from '../lib/graphDocument'
 import type { GraphStyleState } from '../agents/context'
 import { graphLegend } from '../lib/graphLegend'
+import { enterprise } from '../enterpriseLook'
 const Presets = styled(GraphPanel)`
   input[type=color] { padding: 3px; width: 38px; height: 30px; border: 1px solid var(--pure-chrome-line, #dce1e5); border-radius: 6px; background: var(--pure-chrome-surface, white); }
+  ${enterprise} & input[type=color] { border-radius: 2px; }
 `
 const KEY = 'puregraph:style-presets'
 const BUILTIN: Record<string, GraphStyleState> = {

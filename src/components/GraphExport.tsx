@@ -7,8 +7,10 @@ import { useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import type { GraphDocument } from '../lib/graphDocument'
 import { graphSvg, type GraphExportOptions } from '../canvas/graphExport'
+import { enterprise } from '../enterpriseLook'
 const Panel = styled(GraphPanel)`
   img { width: 100%; border: 1px solid var(--pure-chrome-line, #dce1e5); border-radius: 8px; background: repeating-conic-gradient(#eef0f2 0% 25%, white 0% 50%) 50% / 16px 16px; }
+  ${enterprise} & img { border-radius: 2px; }
 `
 export function GraphExport({ document, visibleElements = document.elements, selectedIds = [], options, setOptions, onExport }: { document: GraphDocument; visibleElements?: GraphElement[]; selectedIds?: string[]; options: GraphExportOptions; setOptions: (options: GraphExportOptions) => void; onExport: (format: 'svg' | 'png' | 'json' | 'html', options: GraphExportOptions) => Promise<string> }) {
   const [preview, setPreview] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)

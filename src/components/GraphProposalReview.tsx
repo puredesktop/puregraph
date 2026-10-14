@@ -4,6 +4,7 @@ import { graphContentFingerprint, type GraphDocument } from '../lib/graphDocumen
 import type { GraphProposal } from '../lib/graphProposal'
 import { graphSvg } from '../canvas/graphExport'
 import { GraphPanel, ControlRow } from './GraphPanel'
+import { enterprise } from '../enterpriseLook'
 
 const Notice = styled(GraphPanel)`
   margin: 0 12px 12px;
@@ -14,6 +15,7 @@ const Notice = styled(GraphPanel)`
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   strong { display: block; margin-bottom: 3px; }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
 `
 const Dialog = styled.dialog`
   width: min(960px, calc(100vw - 48px));
@@ -31,6 +33,8 @@ const Dialog = styled.dialog`
   h2 { font-size: 20px; }
   button[data-primary]:not(:disabled) { background: var(--pure-chrome-accent, #267b66); color: var(--pure-chrome-on-accent, white); border-color: transparent; }
   footer { position: sticky; bottom: -24px; padding: 16px 0; background: var(--pure-chrome-paper, white); }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); box-shadow: 0 8px 24px #00000026; }
+  ${enterprise} & h2 { font-size: 18px; font-weight: 600; }
 `
 const Comparison = styled.div`
   display: grid;
@@ -39,6 +43,7 @@ const Comparison = styled.div`
   figure { margin: 0; min-width: 0; }
   figcaption { font-weight: 600; margin-bottom: 8px; }
   img { width: 100%; border: 1px solid var(--pure-chrome-line, #dce1e5); border-radius: 8px; }
+  ${enterprise} & img { border-radius: 2px; }
   @media (max-width: 650px) { grid-template-columns: minmax(0, 1fr); }
 `
 

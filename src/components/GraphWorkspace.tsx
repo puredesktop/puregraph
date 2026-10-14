@@ -66,6 +66,7 @@ import { graphAssetExportPath, isGraphPackagePath } from '../lib/graphPaths'
 import { graphFingerprint, livePathFor, withLiveSource } from '@purescience/platform-ui/components/assets/asset-library/model/live'
 import { GRAPH_APP_SLUG, GRAPH_ASSET_FIGURES_DIR } from '../constants'
 import type { PureGraphBootState } from '../types'
+import { enterprise } from '../enterpriseLook'
 
 interface GraphWorkspaceProps {
   proposal: GraphProposal | null
@@ -174,6 +175,8 @@ const Button = styled.button`
     cursor: not-allowed;
     opacity: 0.55;
   }
+
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
 `
 
 const GhostButton = styled(Button)`
@@ -209,6 +212,9 @@ const Navigation = styled.nav`
     box-shadow: 0 1px 3px #0000000a;
     font-weight: 600;
   }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+  ${enterprise} && button { border-radius: 2px; }
+  ${enterprise} && button[aria-pressed='true'] { box-shadow: none; }
 `
 
 const Workspace = styled.div`
@@ -254,6 +260,13 @@ const SectionTitle = styled(SidebarSectionLabel).attrs({ as: 'h2' })`
   margin: 0;
   padding: 0;
 
+  }
+  ${enterprise} && {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: normal;
+    text-transform: none;
   }
 `
 
@@ -349,6 +362,12 @@ const StatLabel = styled(SidebarSectionLabel)`
   padding: 0;
 
   }
+  ${enterprise} && {
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: normal;
+    text-transform: none;
+  }
 `
 
 const Inspector = styled.div`
@@ -362,6 +381,7 @@ const Inspector = styled.div`
 
 const InspectorMeta = styled(MetaText)`
   display: block;
+  ${enterprise} & { font-family: inherit; font-size: 12px; }
   overflow: hidden;
   text-overflow: ellipsis;
 `
@@ -392,6 +412,7 @@ const GraphHost = styled.main`
   border: 1px solid var(--pure-chrome-line, #dce1e5);
   border-radius: 12px;
   overflow: hidden;
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
 `
 
 const GraphCanvas = styled.div`
