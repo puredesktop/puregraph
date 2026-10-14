@@ -24,6 +24,8 @@ import type {
   Core,
 } from 'cytoscape'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { PlatformIcon } from '@purescience/platform-ui/components/chrome/PlatformIcon'
 import styled from 'styled-components'
 import {
   AppSidebar,
@@ -41,6 +43,7 @@ import {
   type GraphNodeShape,
 } from '../constants'
 import { usePureGraphAgentTools } from '../hooks/usePureGraphAgentTools'
+import { usePanelOpen } from '../hooks/usePanelOpen'
 import type {
   GraphContextSummary,
   GraphStyleState,
@@ -143,6 +146,13 @@ const Status = styled(MetaText)`
   }
 `
 
+const HeaderStart = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+`
+
 const Actions = styled.div`
   display: flex;
   align-items: center;
@@ -191,6 +201,16 @@ const GhostButton = styled(Button)`
   }
 `
 
+/** Icon-only toolbar button that closes and reopens the controls column. */
+const PanelToggle = styled(GhostButton)`
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+`
+
 const Navigation = styled.nav`
   display: flex;
   gap: 2px;
@@ -228,6 +248,8 @@ const Workspace = styled.div`
   @media (max-width: 700px) { grid-template-columns: minmax(0, min(var(--graph-panel-width, 320px), calc(100vw - 140px))) minmax(120px, 1fr); }
   min-width: 0;
   min-height: 0;
+  /* Closed controls give the whole width to the graph. */
+  &[data-controls-hidden='true'] { grid-template-columns: minmax(0, 1fr); }
 `
 
 // Give graph tables and controls room while keeping the canvas primary.
@@ -246,6 +268,7 @@ const Panel = styled(AppSidebar)`
   background: transparent;
 
   }
+  &&[hidden] { display: none; }
 `
 
 const Section = styled.section`
@@ -409,6 +432,7 @@ const GraphHost = styled.main`
   min-height: 0;
   background: var(--pure-chrome-paper);
   margin: 0 12px 12px 0;
+  [data-controls-hidden='true'] > & { margin-left: 12px; }
   border: 1px solid var(--pure-chrome-line, #dce1e5);
   border-radius: 12px;
   overflow: hidden;
@@ -460,7 +484,12 @@ export function GraphWorkspace({
   canUndo, canRedo, onUndo, onRedo, saveStatus, onRetrySave, onCommand,
 }: GraphWorkspaceProps): React.ReactElement {
   const [activePanel, setActivePanel] = useState('Graph')
-  const [panelWidth, setPanelWidth] = useState(360), [collapsed, setCollapsed] = useState(false)
+  const [panelWidth, setPanelWidth] = useState(360)
+  // The controls column can be closed so the graph takes the room; the
+  // choice is remembered across reloads.
+  const [controlsOpen, setControlsOpen] = usePanelOpen('puregraph.controlsOpen')
+  const collapsed = !controlsOpen
+  const showPanel = (panel: string): void => { setActivePanel(panel); setControlsOpen(true) }
   const [view, setView] = useState(emptyGraphView)
   const [layoutBusy, setLayoutBusy] = useState(false)
   const layoutAbort = useRef<AbortController | null>(null)
@@ -940,11 +969,21 @@ export function GraphWorkspace({
     <Root data-app="graph">
       <div>
       <Header>
-        <Status>{status} · {saveStatus}</Status>
+        <HeaderStart>
+          <PanelToggle
+            aria-label={collapsed ? 'Show controls' : 'Hide controls'}
+            title={collapsed ? 'Show controls' : 'Hide controls'}
+            aria-expanded={controlsOpen}
+            aria-controls="puregraph-controls"
+            onClick={() => setControlsOpen(open => !open)}
+          >
+            <PlatformIcon icon={collapsed ? PanelLeftOpen : PanelLeftClose} size={16} />
+          </PanelToggle>
+          <Status>{status} · {saveStatus}</Status>
+        </HeaderStart>
         <Actions>
           {saveStatus === 'Not saved' && <GhostButton onClick={onRetrySave}>Retry save</GhostButton>}
           {layoutBusy && <GhostButton onClick={() => layoutAbort.current?.abort()}>Cancel layout</GhostButton>}
-          <GhostButton onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Show controls' : 'Hide controls'}</GhostButton>
           <GhostButton disabled={!canUndo} onClick={onUndo}>Undo</GhostButton>
           <GhostButton disabled={!canRedo} onClick={onRedo}>Redo</GhostButton>
           <GhostButton type="button" disabled={!cyReady} onClick={fit}>
@@ -955,8 +994,8 @@ export function GraphWorkspace({
       </Header>
       <GraphProposalReview document={currentDocument} proposal={proposal} onApply={onApplyProposal} onDiscard={onDiscardProposal} />
       </div>
-      <Workspace style={{ '--graph-panel-width': collapsed ? '0px' : `${activePanel === 'Data' ? Math.max(panelWidth, 520) : panelWidth}px` } as React.CSSProperties}>
-        <Panel style={{ display: collapsed ? 'none' : undefined }}>
+      <Workspace data-controls-hidden={collapsed} style={{ '--graph-panel-width': `${activePanel === 'Data' ? Math.max(panelWidth, 520) : panelWidth}px` } as React.CSSProperties}>
+        <Panel id="puregraph-controls" aria-label="Graph controls" hidden={collapsed}>
           <label style={{ fontSize: 11 }}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></label>
           <Navigation aria-label="Graph workspace">
             {['Data', 'Graph', 'Explore', 'Style', 'Review', 'Export'].map(panel => <GhostButton key={panel} aria-pressed={activePanel === panel} onClick={() => setActivePanel(panel)}>{panel}</GhostButton>)}
@@ -1264,7 +1303,7 @@ export function GraphWorkspace({
             <EmptyOverlay>Loading graph</EmptyOverlay>
           ) : graphStats.nodes === 0 ? (
             <EmptyOverlay>
-              Create a relationship map.<br /><GhostButton onClick={() => setActivePanel('Data')}>Import data</GhostButton> <GhostButton onClick={() => { setActivePanel('Graph'); document.querySelectorAll('details').forEach(item => { if (item.textContent?.includes('Create nodes and edges')) item.open = true }) }}>Add a node</GhostButton>
+              Create a relationship map.<br /><GhostButton onClick={() => showPanel('Data')}>Import data</GhostButton> <GhostButton onClick={() => { showPanel('Graph'); document.querySelectorAll('details').forEach(item => { if (item.textContent?.includes('Create nodes and edges')) item.open = true }) }}>Add a node</GhostButton>
             </EmptyOverlay>
           ) : null}
         </GraphHost>
