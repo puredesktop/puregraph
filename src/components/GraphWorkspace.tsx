@@ -1288,7 +1288,7 @@ export function GraphWorkspace({
           {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
           {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}        </Panel>
         <GraphHost style={{ background: backgroundColor }}>
-          <GraphCanvas ref={containerRef} {...agentRefs([documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
+          <GraphCanvas ref={containerRef} {...agentRefs(['@open', documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
             style={{position:'absolute',top:12,right:12,zIndex:2}}
             disabled={dragSnapshot?.request !== dragRequest} onError={setStatus}
