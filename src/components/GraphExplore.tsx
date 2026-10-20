@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { GraphPanel, ControlRow } from './GraphPanel'
 import { GraphNodePicker } from './GraphNodePicker'
 import { GraphField } from './GraphField'
+import { categoryRefs, elementRefs, viewRefs } from '../lib/agentRefs'
 import type { GraphDocument } from '../lib/graphDocument'
 import type { GraphCommand } from '../lib/graphCommands'
 import { connectedComponents, shortestPath } from '../lib/graphAnalysis'
@@ -31,9 +32,9 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
     <p>{shown.filter(element => !element.data.source).length} nodes · {shown.filter(element => element.data.source).length} relationships in this view</p>
     <ControlRow><button onClick={() => { onView(emptyGraphView()); onSelect([]) }}>Reset view</button><button onClick={onFit}>Fit view</button></ControlRow>
     <label>Find nodes or relationships<input value={query} onChange={event => { setQuery(event.target.value); setOffset(0) }} /></label>
-    {query && <><p>{matches.total} matches</p>{matches.elements.map(element => <button key={element.data.id} onClick={() => onSelect([element.data.id!])}>{String(element.data.label || element.data.id)} · {element.data.id}</button>)}<ControlRow><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>Previous matches</button><button disabled={matches.nextOffset === null} onClick={() => setOffset(matches.nextOffset!)}>More matches</button></ControlRow></>}
+    {query && <><p>{matches.total} matches</p>{matches.elements.map(element => <button key={element.data.id} {...elementRefs(element.data)} onClick={() => onSelect([element.data.id!])}>{String(element.data.label || element.data.id)} · {element.data.id}</button>)}<ControlRow><button disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 30))}>Previous matches</button><button disabled={matches.nextOffset === null} onClick={() => setOffset(matches.nextOffset!)}>More matches</button></ControlRow></>}
     <details><summary>Categories and focus</summary>
-      {categories.map(category => <label key={category}><span><input type="checkbox" checked={!view.hiddenCategories.includes(category)} onChange={event => onView({ ...view, hiddenCategories: event.target.checked ? view.hiddenCategories.filter(item => item !== category) : [...view.hiddenCategories, category] })} /> {category}</span></label>)}
+      {categories.map(category => <label key={category} {...categoryRefs(category)}><span><input type="checkbox" checked={!view.hiddenCategories.includes(category)} onChange={event => onView({ ...view, hiddenCategories: event.target.checked ? view.hiddenCategories.filter(item => item !== category) : [...view.hiddenCategories, category] })} /> {category}</span></label>)}
       <label><span><input type="checkbox" checked={view.mode === 'dim'} onChange={event => onView({ ...view, mode: event.target.checked ? 'dim' : 'hide' })} /> Dim excluded elements instead of hiding</span></label>
       <button disabled={!selectedIds.length} onClick={() => focus(selectedIds)}>Focus selection</button>
     </details>
@@ -46,7 +47,7 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
       <p>Fewest relationships, {document.style.directed ? 'following arrows' : 'in either direction'}, within this view.</p>
       <button onClick={() => { try { const path = shortestPath(shown, start, end, document.style.directed); if (path) { focus([...path.nodes, ...path.edges]); setMessage(`${path.edges.length} relationships: ${path.nodes.join(' → ')}`) } else setMessage('No path in this view. Reset the view to search the whole graph.') } catch (error) { setMessage(String(error)) } }}>Find and focus path</button>
     </details>
-    {selected && <details open key={selected.data.id}><summary>Details · {selected.data.label || selected.data.id}</summary>
+    {selected && <details open key={selected.data.id} {...elementRefs(selected.data)}><summary>Details · {selected.data.label || selected.data.id}</summary>
       <p>{selected.data.id}{selected.data.source ? ` · ${selected.data.source} → ${selected.data.target}` : ` · ${graphCategory(selected)}`}</p>
       {['label', 'category', 'notes', 'sourceUrl', 'provenance', 'date', 'confidence'].map(field => <label key={field}>{field}<GraphField label={`Selected ${field}`} value={String(selected.data[field] ?? '')} onCommit={value => evidence(field, value)} /></label>)}
       <label><span><input type="checkbox" checked={selected.data.synthetic === true} onChange={event => onCommand([{ type: 'update', ids: [selected.data.id!], data: { synthetic: event.target.checked } }])} /> Synthetic / illustrative data</span></label>
@@ -57,7 +58,7 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
     <details><summary>Saved views and story</summary>
       <label>View name<input value={name} maxLength={160} onChange={event => setName(event.target.value)} /></label><label>Caption<textarea value={caption} onChange={event => setCaption(event.target.value)} /></label>
       <button onClick={() => run(() => { onSaveView(name, caption); setName(''); setCaption('') })}>Save view</button>
-      {(document.views ?? []).map((saved, index) => <div key={saved.id}><button onClick={() => onOpenView(saved)}>{index + 1}. {saved.name}</button><p>{saved.caption}</p><ControlRow><button disabled={index === 0} onClick={() => { const views = [...document.views!]; [views[index - 1], views[index]] = [views[index], views[index - 1]]; onCommand([{ type: 'views', views }]) }}>Move earlier</button><button onClick={() => onCommand([{ type: 'views', views: document.views!.filter(item => item.id !== saved.id) }])}>Delete view</button></ControlRow></div>)}
+      {(document.views ?? []).map((saved, index) => <div key={saved.id} {...viewRefs(saved)}><button onClick={() => onOpenView(saved)}>{index + 1}. {saved.name}</button><p>{saved.caption}</p><ControlRow><button disabled={index === 0} onClick={() => { const views = [...document.views!]; [views[index - 1], views[index]] = [views[index], views[index - 1]]; onCommand([{ type: 'views', views }]) }}>Move earlier</button><button onClick={() => onCommand([{ type: 'views', views: document.views!.filter(item => item.id !== saved.id) }])}>Delete view</button></ControlRow></div>)}
       <p>Views and captions are saved with the graph and can be included in HTML exports.</p>
     </details>
     <details><summary>What-if scenario</summary><p>Temporarily exclude selected nodes or relationships. The underlying graph stays intact.</p><button disabled={!selectedIds.length} onClick={() => onView({ ...view, hiddenIds: [...new Set([...view.hiddenIds, ...selectedIds])] })}>Exclude selection</button><p>{view.hiddenIds.length} excluded · {connectedComponents(shown).length} components now; {connectedComponents(document.elements).length} in the full graph.</p><button onClick={() => onView({ ...view, hiddenIds: [] })}>Restore excluded elements</button></details>

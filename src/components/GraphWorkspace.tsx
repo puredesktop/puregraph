@@ -70,6 +70,7 @@ import { graphFingerprint, livePathFor, withLiveSource } from '@purescience/plat
 import { GRAPH_APP_SLUG, GRAPH_ASSET_FIGURES_DIR } from '../constants'
 import type { PureGraphBootState } from '../types'
 import { enterprise } from '../enterpriseLook'
+import { agentRefs, categoryRefs } from '../lib/agentRefs'
 
 interface GraphWorkspaceProps {
   proposal: GraphProposal | null
@@ -1287,7 +1288,7 @@ export function GraphWorkspace({
           {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
           {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}        </Panel>
         <GraphHost style={{ background: backgroundColor }}>
-          <GraphCanvas ref={containerRef} />
+          <GraphCanvas ref={containerRef} {...agentRefs([documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
             style={{position:'absolute',top:12,right:12,zIndex:2}}
             disabled={dragSnapshot?.request !== dragRequest} onError={setStatus}
@@ -1297,7 +1298,7 @@ export function GraphWorkspace({
             }} />}
 
           {styleState.showLegend && <div aria-label="Graph legend" style={{ position: 'absolute', bottom: 16, left: 16, maxHeight: '30%', overflow: 'auto', background: backgroundColor, color: readableTextColor(backgroundColor), padding: 12, borderRadius: 8 }}>
-            {graphLegend(currentDocument).map(entry => <div key={entry.label + entry.color} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ background: entry.color, width: 12, height: 12, display: 'inline-block', borderRadius: 3 }} />{entry.label}</div>)}
+            {graphLegend(currentDocument).map(entry => <div key={entry.label + entry.color} {...categoryRefs(entry.label)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ background: entry.color, width: 12, height: 12, display: 'inline-block', borderRadius: 3 }} />{entry.label}</div>)}
           </div>}
           {!cyReady ? (
             <EmptyOverlay>Loading graph</EmptyOverlay>
