@@ -1,4 +1,5 @@
 import { GraphField } from './GraphField'
+import { elementRefs } from '../lib/agentRefs'
 import { GraphPanel, ControlRow } from './GraphPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import styled from 'styled-components'
@@ -54,7 +55,7 @@ export function GraphData({ elements, documentKey, onCommand, selected, onSelect
     <button onClick={() => setSelected(visible.map(element => element.data.id!))}>Select this page</button>
     <div style={{ overflowX: 'auto' }}><table aria-label={`${kind} table`}>
       <thead><tr><th aria-label="Select"></th><th>ID</th><th>Label</th>{kind === 'nodes' && <th>Category</th>}{kind === 'edges' && <><th>Source</th><th>Target</th></>}</tr></thead>
-      <tbody>{visible.map(element => <tr key={element.data.id}>
+      <tbody>{visible.map(element => <tr key={element.data.id} {...elementRefs(element.data)}>
         <td><input type="checkbox" aria-label={`Select ${element.data.id}`} checked={selected.includes(element.data.id!)} onChange={event => setSelected(event.target.checked ? [...selected, element.data.id!] : selected.filter(id => id !== element.data.id))} /></td>
         {['id', 'label', ...(kind === 'edges' ? ['source', 'target'] : ['category'])].map(field => <td key={field}><GraphField label={`${element.data.id} ${field}`} value={String(element.data[field] ?? '')} onCommit={value => {
           onCommand([field === 'id' ? { type: 'rename', id: element.data.id!, nextId: value } : { type: 'update', ids: [element.data.id!], data: { [field]: value } }])

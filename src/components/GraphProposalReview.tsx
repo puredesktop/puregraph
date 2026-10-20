@@ -5,6 +5,7 @@ import type { GraphProposal } from '../lib/graphProposal'
 import { graphSvg } from '../canvas/graphExport'
 import { GraphPanel, ControlRow } from './GraphPanel'
 import { enterprise } from '../enterpriseLook'
+import { proposalRefs } from '../lib/agentRefs'
 
 const Notice = styled(GraphPanel)`
   margin: 0 12px 12px;
@@ -75,12 +76,12 @@ export function GraphProposalReview({ document, proposal, onApply, onDiscard }: 
   const stale = graphContentFingerprint(document) !== proposal.base
   function act(action: () => void) { try { action(); setOpen(false) } catch (failure) { setError(String(failure)) } }
   return <>
-    <Notice aria-label="Pending graph proposal" role="status">
+    <Notice aria-label="Pending graph proposal" role="status" {...proposalRefs(proposal)}>
       <div><strong>Graph proposal ready</strong><p>{proposal.title} · Nothing applied yet</p></div>
       <button onClick={() => setOpen(true)}>Review proposal</button>
     </Notice>
     <Dialog ref={dialog} aria-labelledby="graph-proposal-heading" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
-      <GraphPanel>
+      <GraphPanel {...proposalRefs(proposal)}>
         <h2 id="graph-proposal-heading">Review graph proposal</h2>
         <strong>{proposal.title}</strong>
         <p>Changes to “{document.title}”. This edits the current document; it does not create a new graph.</p>
