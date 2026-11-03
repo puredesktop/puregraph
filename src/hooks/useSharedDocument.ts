@@ -113,7 +113,10 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
         done && file.name === latest.current.contentFile ? { ...file, content: done.content } : file))
     },
     onExternalChange: ({ path, dirty }) => {
-      if (dirty) return
+      if (dirty) {
+        void takeInTheOtherCopy(path)
+        return
+      }
       void inTurn(async () => {
         agreed.current = await lookAtDisk(path)
         latest.current.reload(path)
@@ -134,7 +137,7 @@ export function useSharedDocument<T>(options: SharedDocumentOptions<T>): Documen
   // The shell refused the save: the other copy saved first. Merge, and the merge saves.
   const refused = /Save conflict/i.test(lifecycle.doc.error ?? '') && !lifecycle.doc.saving
   useEffect(() => {
-    void takeInTheOtherCopy; void refused
+    if (refused && path) void takeInTheOtherCopy(path)
   }, [refused, path, takeInTheOtherCopy])
 
   return lifecycle

@@ -144,7 +144,7 @@ it('rejects a concurrent disk revision without losing local changes', async () =
   } finally { await act(async () => root.unmount()) }
 })
 
-it('synchronizes two independent clean sessions without echo saves and protects dirty sessions', async () => {
+it('synchronizes two independent clean sessions without echo saves and merges into dirty sessions', async () => {
   const first = await mount(), firstId = [...state.instances.keys()][0]
   const before = new Set(state.listeners)
   const second = createRoot(document.createElement('div'))
@@ -169,7 +169,9 @@ it('synchronizes two independent clean sessions without echo saves and protects 
     await act(async () => { await b().onSaveDocument() })
     await act(async () => firstListener({ kind: 'content', path: '/A.graph' }))
     expect(a().currentDocument.elements[0].data.label).toBe('Unsaved first')
-    await act(async () => { await expect(a().onSaveDocument()).rejects.toThrow('Save conflict') })
+    // It has taken in the other copy's save, so its own goes through and nothing of either is lost.
+    await act(async () => { await a().onSaveDocument() })
+    expect(JSON.parse(state.files.get('/A.graph/graph.graph.json')!).elements[0].data.label).toBe('Unsaved first')
   } finally { await act(async () => { first.unmount(); second.unmount() }) }
 })
 

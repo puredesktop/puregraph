@@ -4,10 +4,7 @@ import { EmptyState } from '@purescience/platform-ui/components/common/feedback/
 import { usePlatformBridge } from '@purescience/platform-ui/bridge/react/usePlatformBridge'
 import { usePlatformViewportResource } from '@purescience/platform-ui/bridge/react/usePlatformViewportResource'
 import { useDocumentHotkeys } from '@purescience/platform-ui/bridge/react/useDocumentHotkeys'
-import {
-  useDocumentLifecycle,
-  type DocumentLifecycle,
-} from '@purescience/platform-ui/bridge/react/useDocumentLifecycle'
+import type { DocumentLifecycle } from '@purescience/platform-ui/bridge/react/useDocumentLifecycle'
 import {
   DocumentHeaderActions,
   DocumentSwitcher,
@@ -28,6 +25,8 @@ import {
 import { placeMissingNodes } from './lib/graphLayout'
 import type { GraphCommand } from './lib/graphCommands'
 import { useCompactInRoom } from './hooks/useCompactInRoom'
+import { useSharedDocument } from './hooks/useSharedDocument'
+import { mergeGraphs } from './lib/graphMerge'
 import { useGraphRecovery } from './hooks/useGraphRecovery'
 import { useGraphSession } from './hooks/useGraphSession'
 import { usePureGraphBoot } from './hooks/usePureGraphBoot'
@@ -130,7 +129,6 @@ function GraphDocumentApp({
   // bound to. Both refs are assigned together with every rebind, so a
   // switch mid-flight never writes one graph's content into another's
   // package.
-  const revisionRef = useRef<string | null>(null)
   const boundPathRef = useRef<string | null>(null)
   const boundDocumentRef = useRef(document)
   // Set when a new document should become a draft as soon as it has
@@ -167,7 +165,6 @@ function GraphDocumentApp({
         if (ticket !== navigationRef.current) return false
         if (documentRef.current !== outgoing) { setMessage('The graph changed while saving. Your edits are still open; try the document action again.'); return false }
         savedContentRef.current = persist ? null : graphContentFingerprint(seed)
-        revisionRef.current = null
         boundPathRef.current = null
         boundDocumentRef.current = seed
         documentRef.current = seed
@@ -232,7 +229,6 @@ function GraphDocumentApp({
           lifecycle.adopt(packagePath, { title: next.title })
         }
         savedContentRef.current = graphContentFingerprint(next)
-        revisionRef.current = next.revision ?? null
         boundPathRef.current = packagePath
         boundDocumentRef.current = next
         documentRef.current = next
@@ -248,21 +244,31 @@ function GraphDocumentApp({
     [startGraph, adoptDocument],
   )
 
-  const lifecycle = useDocumentLifecycle({
+  const lifecycle = useSharedDocument({
     appSlug: GRAPH_APP_SLUG,
     suffix: GRAPH_PACKAGE_SUFFIX,
     kind: 'package',
     suggestedTitle: () => documentRef.current.title || DEFAULT_GRAPH_TITLE,
-    // An agent or another app rewrote the open package on disk. Reload
-    // unless the user has unsaved edits here.
-    onExternalChange: ({ path }) => {
-      if (path !== boundPathRef.current || graphContentFingerprint(documentRef.current) !== savedContentRef.current) return
-      void openGraphPath(path, true)
+    // An agent, another app or a second copy of this one rewrote the open
+    // package on disk. Reload, or merge if this copy has unsaved edits.
+    contentFile: GRAPH_DOCUMENT_FILE,
+    parse: parseGraphDocument,
+    read: readTextFile,
+    live: () => documentRef.current,
+    merge: mergeGraphs,
+    showMerged: merged => {
+      documentRef.current = merged
+      boundDocumentRef.current = merged
+      setDocument(merged)
+      setLoadedDocument({ document: merged, nonce: ++navigationRef.current, resetView: false })
+      recovery.capture(merged, boundPathRef.current)
     },
-    revision: () => ({ file: GRAPH_DOCUMENT_FILE, field: 'revision', expected: revisionRef.current }),
+    reload: path => {
+      if (path === boundPathRef.current) void openGraphPath(path, true)
+    },
     onSaved: files => {
       const content = files.find(file => file.name === GRAPH_DOCUMENT_FILE)?.content
-      if (typeof content === 'string') { revisionRef.current = JSON.parse(content).revision ?? null; savedContentRef.current = graphContentFingerprint(parseGraphDocument(content)); recovery.saved(content) }
+      if (typeof content === 'string') { savedContentRef.current = graphContentFingerprint(parseGraphDocument(content)); recovery.saved(content) }
     },
     serialize: () => {
       const current = boundDocumentRef.current
@@ -410,10 +416,6 @@ function GraphDocumentApp({
         />
       }
     >
-      {lifecycle.doc.error?.includes('Save conflict') && <div role="alert">
-        Another window saved a newer version. Your edits are preserved here.
-        <button onClick={() => void startGraph({ ...documentRef.current, title: `${documentRef.current.title} — conflict copy` }, 'Saved your changes as a separate graph.', true, false)}>Save my edits as a new graph</button>
-      </div>}
       {recovery.error && <div role="alert">{recovery.error}</div>}
       {recovery.entries.map(entry => <div key={entry.id} role="status">
         Interrupted work: {entry.document.title}
@@ -442,9 +444,9 @@ function GraphDocumentApp({
         documentPath={lifecycle.doc.path}
         documentTitle={document.title || DEFAULT_GRAPH_TITLE}
         loadedDocument={loadedDocument}
-        message={lifecycle.doc.error ?? message}
+        message={(lifecycle.doc.error?.includes('Save conflict') ? null : lifecycle.doc.error) ?? message}
         compact={compact}
-        saveStatus={lifecycle.doc.saving ? 'Saving…' : lifecycle.doc.error ? 'Not saved' : lifecycle.doc.savedAt ? 'Saved' : 'New graph'}
+        saveStatus={lifecycle.doc.saving ? 'Saving…' : lifecycle.doc.error && !lifecycle.doc.error.includes('Save conflict') ? 'Not saved' : lifecycle.doc.savedAt ? 'Saved' : 'New graph'}
         onRetrySave={() => { void saveDocument(true).catch(error => setMessage(errorMessage(error))) }}
         onSaveDocument={() => saveDocument(true)}
         onCreateGraph={async next => {
