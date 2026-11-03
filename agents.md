@@ -138,3 +138,5 @@ items are listed first. Work from known IDs. Never invent IDs for existing nodes
 - applyGraphPalette stages a measured palette through the normal proposal flow.
 - Use exportGraph format html for an offline explorable deliverable. SVG/PNG are
   static. Do not claim a file is saved until save/export succeeds.
+
+Copies of this app can run side by side (a tab and one held inside a page). They merge each other's work on one graph node by node and edge by edge, so a change made in the other copy can appear while you work; read the graph again before replacing something you read earlier.
