@@ -44,6 +44,7 @@ import {
 } from '../constants'
 import { usePureGraphAgentTools } from '../hooks/usePureGraphAgentTools'
 import { usePanelOpen } from '../hooks/usePanelOpen'
+import { compactPart } from '../hooks/useCompactInRoom'
 import type {
   GraphContextSummary,
   GraphStyleState,
@@ -96,6 +97,8 @@ interface GraphWorkspaceProps {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
+  /** Held inside a page (useCompactInRoom): the graph first, and only what edits it. */
+  compact?: boolean
 }
 
 // One map instead of eleven near-identical selectors, so the label colour can
@@ -483,12 +486,18 @@ export function GraphWorkspace({
   ready,
   boot,
   canUndo, canRedo, onUndo, onRedo, saveStatus, onRetrySave, onCommand,
+  compact = false,
 }: GraphWorkspaceProps): React.ReactElement {
   const [activePanel, setActivePanel] = useState('Graph')
   const [panelWidth, setPanelWidth] = useState(360)
   // The controls column can be closed so the graph takes the room; the
   // choice is remembered across reloads.
-  const [controlsOpen, setControlsOpen] = usePanelOpen('puregraph.controlsOpen')
+  const [wholeAppControlsOpen, setWholeAppControlsOpen] = usePanelOpen('puregraph.controlsOpen')
+  // Held in a page the graph has the box, and the controls open beside it only when asked for. What is done here never
+  // touches the full app's own choice, which Full app reads back untouched.
+  const [compactControlsOpen, setCompactControlsOpen] = useState(false)
+  const controlsOpen = compact ? compactControlsOpen : wholeAppControlsOpen
+  const setControlsOpen = compact ? setCompactControlsOpen : setWholeAppControlsOpen
   const collapsed = !controlsOpen
   const showPanel = (panel: string): void => { setActivePanel(panel); setControlsOpen(true) }
   const [view, setView] = useState(emptyGraphView)
@@ -813,6 +822,16 @@ export function GraphWorkspace({
     const cy = getCy(); const ids = new Set(visibleElements.map(element => element.data.id)); const included = cy.elements().filter(element => ids.has(element.id())); if (included.length) cy.fit(included, 32)
     setStatus('Fit graph')
   }, [getCy, visibleElements])
+  // Going into the box, or growing to the full app, the graph is fitted to the room it now has.
+  const fitRef = useRef(fit)
+  fitRef.current = fit
+  const wasCompact = useRef(compact)
+  useEffect(() => {
+    if (wasCompact.current === compact) return undefined
+    wasCompact.current = compact
+    const frame = requestAnimationFrame(() => { if (cyRef.current) fitRef.current() })
+    return () => cancelAnimationFrame(frame)
+  }, [compact])
 
   const loadSample = useCallback(
     (sample: GraphSample) => {
@@ -967,7 +986,7 @@ export function GraphWorkspace({
   }, [addEdge, draftEdgeLabel, draftEdgeSource, draftEdgeTarget])
 
   return (
-    <Root data-app="graph">
+    <Root data-app="graph" {...compactPart(compact, 'root')}>
       <div>
       <Header>
         <HeaderStart>
@@ -995,11 +1014,11 @@ export function GraphWorkspace({
       </Header>
       <GraphProposalReview document={currentDocument} proposal={proposal} onApply={onApplyProposal} onDiscard={onDiscardProposal} />
       </div>
-      <Workspace data-controls-hidden={collapsed} style={{ '--graph-panel-width': `${activePanel === 'Data' ? Math.max(panelWidth, 520) : panelWidth}px` } as React.CSSProperties}>
+      <Workspace data-controls-hidden={collapsed} {...compactPart(compact, 'workspace')} style={{ '--graph-panel-width': `${activePanel === 'Data' ? Math.max(panelWidth, 520) : panelWidth}px` } as React.CSSProperties}>
         <Panel id="puregraph-controls" aria-label="Graph controls" hidden={collapsed}>
-          <label style={{ fontSize: 11 }}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></label>
+          <label style={{ fontSize: 11 }} {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></label>
           <Navigation aria-label="Graph workspace">
-            {['Data', 'Graph', 'Explore', 'Style', 'Review', 'Export'].map(panel => <GhostButton key={panel} aria-pressed={activePanel === panel} onClick={() => setActivePanel(panel)}>{panel}</GhostButton>)}
+            {['Data', 'Graph', 'Explore', 'Style', 'Review', 'Export'].map(panel => <GhostButton key={panel} {...compactPart(compact && !['Data', 'Graph', 'Style'].includes(panel), 'hide')} aria-pressed={activePanel === panel} onClick={() => setActivePanel(panel)}>{panel}</GhostButton>)}
           </Navigation>
           <Section hidden={activePanel !== 'Graph'}>
             <SectionTitle>Overview</SectionTitle>
@@ -1287,7 +1306,7 @@ export function GraphWorkspace({
 
           {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
           {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}        </Panel>
-        <GraphHost style={{ background: backgroundColor }}>
+        <GraphHost style={{ background: backgroundColor }} {...compactPart(compact, 'host')}>
           <GraphCanvas ref={containerRef} {...agentRefs(['@open', documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
             style={{position:'absolute',top:12,right:12,zIndex:2}}

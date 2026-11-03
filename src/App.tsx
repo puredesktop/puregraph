@@ -27,6 +27,7 @@ import {
 } from './constants'
 import { placeMissingNodes } from './lib/graphLayout'
 import type { GraphCommand } from './lib/graphCommands'
+import { useCompactInRoom } from './hooks/useCompactInRoom'
 import { useGraphRecovery } from './hooks/useGraphRecovery'
 import { useGraphSession } from './hooks/useGraphSession'
 import { usePureGraphBoot } from './hooks/usePureGraphBoot'
@@ -145,6 +146,10 @@ function GraphDocumentApp({
   } | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  // What a copy held in a page opens is not what the full app reopens next time.
+  const compact = useCompactInRoom()
+  const compactRef = useRef(compact)
+  compactRef.current = compact
 
   /**
    * Replace the open graph with an unbound one. The outgoing package is
@@ -235,7 +240,7 @@ function GraphDocumentApp({
         adoptDocument(next, packagePath)
         setLoadedDocument({ document: next, nonce: Date.now() })
         setMessage(null)
-        await updateGraphSettings({ packagePath })
+        if (!compactRef.current) await updateGraphSettings({ packagePath })
       } catch (error) {
         setMessage(`Could not open ${name}: ${errorMessage(error)}`)
       }
@@ -343,7 +348,7 @@ function GraphDocumentApp({
     const path = await lifecycle.ensureDraft()
     if (!path) return null
     await lifecycle.flush({ throwOnError })
-    await updateGraphSettings({ packagePath: path })
+    if (!compactRef.current) await updateGraphSettings({ packagePath: path })
     return path
   }, [])
 
@@ -393,6 +398,7 @@ function GraphDocumentApp({
 
   return (
     <AppFrame
+      {...(compact ? { 'data-compact-room': '' } : undefined)}
       headerDocumentName={
         document.title?.trim() || (lifecycle.doc.path ? fileNameFromPath(lifecycle.doc.path) : undefined)
       }
@@ -437,6 +443,7 @@ function GraphDocumentApp({
         documentTitle={document.title || DEFAULT_GRAPH_TITLE}
         loadedDocument={loadedDocument}
         message={lifecycle.doc.error ?? message}
+        compact={compact}
         saveStatus={lifecycle.doc.saving ? 'Saving…' : lifecycle.doc.error ? 'Not saved' : lifecycle.doc.savedAt ? 'Saved' : 'New graph'}
         onRetrySave={() => { void saveDocument(true).catch(error => setMessage(errorMessage(error))) }}
         onSaveDocument={() => saveDocument(true)}
