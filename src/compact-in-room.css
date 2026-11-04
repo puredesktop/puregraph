@@ -32,3 +32,163 @@ html[data-held-in-room]:has([data-compact-room]) [data-controls-hidden='true'] >
   border-width: 1px 0 0;
   border-radius: 0;
 }
+
+/* The held look: one white surface edge to edge, hairlines instead of boxes, 3px corners, 13px and 12px type in sentence case,
+   one muted navy. The graph itself is the user's drawing and keeps its colours; only the chrome around it is calmed. Tokens
+   are set on the frame itself so they outrank the White appearance's !important values on the page root. */
+[data-compact-room] {
+  --platform-colors-bg: #ffffff;
+  --platform-colors-app-viewport: #ffffff;
+  --platform-colors-surface: #ffffff;
+  --platform-colors-surface-hover: #f5f6f8;
+  --platform-colors-surface-active: #eef0f3;
+  --platform-colors-border: #dde1e7;
+  --platform-colors-border-soft: #dde1e7;
+  --platform-colors-divider: #dde1e7;
+  --glass-panel: #ffffff;
+  --glass-panel-strong: #ffffff;
+  --glass-well: #f5f6f8;
+  --pure-chrome-surface: #ffffff;
+  --pure-chrome-sidebar: #ffffff;
+  --pure-chrome-bar: #ffffff;
+  --pure-chrome-paper: #ffffff;
+  --pure-chrome-well: #f5f6f8;
+  --pure-chrome-hover: #f5f6f8;
+  --pure-chrome-selection: #eef0f3;
+  --pure-chrome-line: #dde1e7;
+  --pure-chrome-fence: #dde1e7;
+  --pure-chrome-accent: #1f3a5f;
+  --pure-chrome-on-accent: #ffffff;
+  --pure-chrome-radius: 3px;
+  --pure-chrome-ui-size: 13px;
+  --pure-chrome-field-height: 28px;
+  background: #ffffff;
+}
+html[data-held-in-room]:has([data-compact-room]):not(#_) body {
+  background: #ffffff !important;
+}
+[data-compact-room] [data-compact='root'] {
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  background: #ffffff;
+}
+/* One bar, ruled off from the graph below it. */
+[data-compact-room] [data-compact='root'] [data-chrome='toolbar'] {
+  margin: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-bottom: 1px solid #dde1e7;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-compact-room] [data-compact='root'] > div:first-child {
+  background: #ffffff;
+}
+[data-compact-room] [data-compact='root'] button {
+  min-height: 28px;
+  border-radius: 3px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+[data-compact-room] [data-compact='root'] button:hover:not(:disabled) {
+  filter: none;
+}
+[data-compact-room] [data-compact='root'] [data-chrome='toolbar'] button[aria-label$='controls'] {
+  width: 28px;
+}
+/* The White appearance gives the sidebar a cream hover, a warm hairline and sage labels: here they are the neutral greys. */
+[data-compact-room] [data-compact='root'] [data-chrome='sidebar']:not(#_) {
+  --pure-chrome-line: #dde1e7;
+  --pure-chrome-fence: #dde1e7;
+  --pure-chrome-hover: #f5f6f8;
+  --pure-chrome-selection: #eef0f3;
+  --pure-chrome-muted: #5d6674;
+  --pure-chrome-soft: #3f4754;
+}
+[data-compact-room] [data-compact='root'] [data-compact='host']:not(#_) {
+  margin: 0;
+  border-width: 0;
+  border-radius: 0;
+}
+/* The controls column: ruled off, never wider than itself, its tabs one square segmented control. */
+[data-compact-room] [data-chrome='sidebar']:not(#_) {
+  padding-top: 12px;
+  overflow-x: hidden;
+  border-right: 1px solid #dde1e7;
+  background: #ffffff;
+}
+[data-compact-room] [data-chrome='sidebar'] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+[data-compact-room] [data-chrome='sidebar'] select,
+[data-compact-room] [data-chrome='sidebar'] textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid #cdd1d7;
+  border-radius: 3px;
+  box-shadow: none;
+  background: #ffffff;
+}
+[data-compact-room] [data-chrome='sidebar'] label,
+[data-compact-room] [data-chrome='sidebar'] label > * {
+  min-width: 0;
+}
+[data-compact-room] [data-compact='root'] nav {
+  padding: 0;
+  gap: 0;
+  border: 1px solid #cdd1d7;
+  border-radius: 3px;
+  background: #ffffff;
+  overflow: hidden;
+}
+[data-compact-room] [data-compact='root'] nav button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+[data-compact-room] [data-compact='root'] nav button + button {
+  border-left: 1px solid #dde1e7;
+}
+[data-compact-room] [data-compact='root'] nav button[aria-pressed='true'] {
+  box-shadow: none;
+  background: #eef0f3;
+  font-weight: 600;
+}
+/* Labels in the app's sans, sentence case, no letter-spacing. */
+[data-compact-room] [data-chrome='section-label'],
+[data-compact-room] [data-chrome='meta'] {
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+[data-compact-room] [data-chrome='section-label'] {
+  font-size: 12px;
+  font-weight: 600;
+}
+[data-compact-room] [data-chrome='meta'] {
+  font-size: 12px;
+}
+/* No box inside a box: groups are ruled with a hairline, figures sit in square wells. */
+[data-compact-room] [data-chrome='sidebar'] details {
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding-left: 0;
+  padding-right: 0;
+}
+[data-compact-room] [data-chrome='sidebar'] div[class]:has(> [data-chrome='meta']):not(:has(input)) {
+  border-width: 1px 0 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding-left: 0;
+  padding-right: 0;
+}
+[data-compact-room] [data-chrome='sidebar'] div[class]:has(> [data-chrome='section-label']) {
+  border-radius: 3px;
+  background: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
