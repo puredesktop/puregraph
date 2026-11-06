@@ -45,6 +45,7 @@ import {
 import { usePureGraphAgentTools } from '../hooks/usePureGraphAgentTools'
 import { usePanelOpen } from '../hooks/usePanelOpen'
 import { compactPart } from '../hooks/useCompactInRoom'
+import { usePlatformThemeDocumentAttrs } from '@purescience/platform-ui/bridge/react/usePlatformThemeDocumentAttrs'
 import type {
   GraphContextSummary,
   GraphStyleState,
@@ -63,7 +64,7 @@ import {
   type GraphSample,
 } from '../lib/graphParser'
 import { restoreGraphCanvas, fromCyElements } from '../canvas/graphCanvas'
-import { serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
+import { DEFAULT_GRAPH_STYLE, serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
 import { summarizeGraphContext } from '../lib/graphContext'
 import { readableTextColor } from '../lib/contrast'
 import { graphAssetExportPath, isGraphPackagePath } from '../lib/graphPaths'
@@ -72,6 +73,9 @@ import { GRAPH_APP_SLUG, GRAPH_ASSET_FIGURES_DIR } from '../constants'
 import type { PureGraphBootState } from '../types'
 import { enterprise } from '../enterpriseLook'
 import { agentRefs, categoryRefs } from '../lib/agentRefs'
+
+/** The held dark ground (docs/held-apps.md). */
+const HELD_DARK_GROUND = '#1c1c1c'
 
 interface GraphWorkspaceProps {
   proposal: GraphProposal | null
@@ -517,6 +521,13 @@ export function GraphWorkspace({
   // confirm() dialog is suppressed inside the shell's sandboxed iframe.
   const { layout, style: styleState } = currentDocument
   const { nodeColor, edgeColor, backgroundColor, nodeShape, curveStyle, nodeSize, edgeWidth, labelSize, showLabels, directed } = styleState
+  // Held in a page in a dark theme, a graph left on the default white is drawn on the held dark ground (docs/held-apps.md).
+  // Only the drawing changes: a ground someone chose stays, and the document keeps its own.
+  const themeMode = usePlatformThemeDocumentAttrs(compact).mode
+  const drawnStyle = useMemo(() => (compact && themeMode === 'dark' && backgroundColor.toLowerCase() === DEFAULT_GRAPH_STYLE.backgroundColor
+    ? { ...styleState, backgroundColor: HELD_DARK_GROUND }
+    : styleState), [compact, themeMode, backgroundColor, styleState])
+  const drawnBackground = drawnStyle.backgroundColor
   const [layoutScope, setLayoutScope] = useState<'all' | 'selected'>('all')
   const [layoutDirection, setLayoutDirection] = useState<'down' | 'right'>('down')
   const commandRef = useRef(onCommand)
@@ -623,7 +634,7 @@ export function GraphWorkspace({
     const cy = cytoscape({
       container: containerRef.current,
       elements: [],
-      style: buildStyle(styleState),
+      style: buildStyle(drawnStyle),
     })
     cy.on('select unselect', () => {
       if (suppressDocumentChangeRef.current) return
@@ -658,9 +669,9 @@ export function GraphWorkspace({
 
   useEffect(() => {
     if (!cyRef.current) return
-    cyRef.current.style(buildStyle(styleState)).update()
-    cyRef.current.container()?.style.setProperty('background', backgroundColor)
-  }, [backgroundColor, styleState])
+    cyRef.current.style(buildStyle(drawnStyle)).update()
+    cyRef.current.container()?.style.setProperty('background', drawnBackground)
+  }, [drawnBackground, drawnStyle])
 
   useEffect(() => {
     if (!loadedDocument || !cyRef.current) return
@@ -1306,7 +1317,7 @@ export function GraphWorkspace({
 
           {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
           {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}        </Panel>
-        <GraphHost style={{ background: backgroundColor }} {...compactPart(compact, 'host')}>
+        <GraphHost style={{ background: drawnBackground }} {...compactPart(compact, 'host')}>
           <GraphCanvas ref={containerRef} {...agentRefs(['@open', documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
             style={{position:'absolute',top:12,right:12,zIndex:2}}
@@ -1316,7 +1327,7 @@ export function GraphWorkspace({
               return {name:`${currentDocument.title || 'graph'}.svg`,alt:currentDocument.title || 'Graph',dataUrl:dragSnapshot.dataUrl}
             }} />}
 
-          {styleState.showLegend && <div aria-label="Graph legend" style={{ position: 'absolute', bottom: 16, left: 16, maxHeight: '30%', overflow: 'auto', background: backgroundColor, color: readableTextColor(backgroundColor), padding: 12, borderRadius: 8 }}>
+          {styleState.showLegend && <div aria-label="Graph legend" style={{ position: 'absolute', bottom: 16, left: 16, maxHeight: '30%', overflow: 'auto', background: drawnBackground, color: readableTextColor(drawnBackground), padding: 12, borderRadius: 8 }}>
             {graphLegend(currentDocument).map(entry => <div key={entry.label + entry.color} {...categoryRefs(entry.label)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ background: entry.color, width: 12, height: 12, display: 'inline-block', borderRadius: 3 }} />{entry.label}</div>)}
           </div>}
           {!cyReady ? (
