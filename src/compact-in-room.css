@@ -1,3 +1,12 @@
+/* Follows the desk's theme: each colour is light-dark(its light value, its dark partner), the dark ones the held greys
+   of docs/held-apps.md. A light theme leaves the colour scheme as it was; a dark one says dark, and parts that asked
+   for light take --held-scheme instead. */
+[data-compact-room]:is([data-platform-theme='dark'] *),
+html[data-held-in-room]:has([data-compact-room])[data-platform-theme='dark'] {
+  color-scheme: dark;
+  --held-scheme: dark;
+}
+
 /* Compact PureGraph, held inside a page (useCompactInRoom). The frame carries data-compact-room only then, and every rule
    here starts from it, so with compact off nothing in this file applies. Chrome is hidden, not removed: everything stays
    mounted, so the graph, its history and the agent's tools live on. Full app gives it all back. */
@@ -24,7 +33,7 @@
 html[data-held-in-room]:has([data-compact-room]),
 html[data-held-in-room]:has([data-compact-room]) body,
 html[data-held-in-room]:has([data-compact-room]) [data-compact-room] {
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 html[data-held-in-room]:has([data-compact-room]) [data-compact='host'],
 html[data-held-in-room]:has([data-compact-room]) [data-controls-hidden='true'] > [data-compact='host'] {
@@ -37,55 +46,55 @@ html[data-held-in-room]:has([data-compact-room]) [data-controls-hidden='true'] >
    one muted navy. The graph itself is the user's drawing and keeps its colours; only the chrome around it is calmed. Tokens
    are set on the frame itself so they outrank the White appearance's !important values on the page root. */
 [data-compact-room] {
-  --platform-colors-bg: #ffffff;
-  --platform-colors-app-viewport: #ffffff;
-  --platform-colors-surface: #ffffff;
-  --platform-colors-surface-hover: #f5f6f8;
-  --platform-colors-surface-active: #eef0f3;
-  --platform-colors-border: #dde1e7;
-  --platform-colors-border-soft: #dde1e7;
-  --platform-colors-divider: #dde1e7;
-  --glass-panel: #ffffff;
-  --glass-panel-strong: #ffffff;
-  --glass-well: #f5f6f8;
-  --pure-chrome-surface: #ffffff;
-  --pure-chrome-sidebar: #ffffff;
-  --pure-chrome-bar: #ffffff;
-  --pure-chrome-paper: #ffffff;
-  --pure-chrome-well: #f5f6f8;
-  --pure-chrome-hover: #f5f6f8;
-  --pure-chrome-selection: #eef0f3;
-  --pure-chrome-line: #dde1e7;
-  --pure-chrome-fence: #dde1e7;
-  --pure-chrome-accent: #1f3a5f;
-  --pure-chrome-on-accent: #ffffff;
+  --platform-colors-bg: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-app-viewport: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-surface: light-dark(#ffffff, #1c1c1c);
+  --platform-colors-surface-hover: light-dark(#f5f6f8, #272727);
+  --platform-colors-surface-active: light-dark(#eef0f3, #2c2c2c);
+  --platform-colors-border: light-dark(#dde1e7, #3a3a3a);
+  --platform-colors-border-soft: light-dark(#dde1e7, #3a3a3a);
+  --platform-colors-divider: light-dark(#dde1e7, #3a3a3a);
+  --glass-panel: light-dark(#ffffff, #1c1c1c);
+  --glass-panel-strong: light-dark(#ffffff, #1c1c1c);
+  --glass-well: light-dark(#f5f6f8, #272727);
+  --pure-chrome-surface: light-dark(#ffffff, #1c1c1c);
+  --pure-chrome-sidebar: light-dark(#ffffff, #1c1c1c);
+  --pure-chrome-bar: light-dark(#ffffff, #1c1c1c);
+  --pure-chrome-paper: light-dark(#ffffff, #1c1c1c);
+  --pure-chrome-well: light-dark(#f5f6f8, #272727);
+  --pure-chrome-hover: light-dark(#f5f6f8, #272727);
+  --pure-chrome-selection: light-dark(#eef0f3, #2c2c2c);
+  --pure-chrome-line: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-fence: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-accent: light-dark(#1f3a5f, #98b8e5);
+  --pure-chrome-on-accent: light-dark(#ffffff, #1c1c1c);
   --pure-chrome-radius: 3px;
   --pure-chrome-ui-size: 13px;
   --pure-chrome-field-height: 28px;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 html[data-held-in-room]:has([data-compact-room]):not(#_) body {
-  background: #ffffff !important;
+  background: light-dark(#ffffff, #1c1c1c) !important;
 }
 [data-compact-room] [data-compact='root'] {
-  --canvas: #ffffff;
-  --surface: #ffffff;
-  background: #ffffff;
+  --canvas: light-dark(#ffffff, #1c1c1c);
+  --surface: light-dark(#ffffff, #1c1c1c);
+  background: light-dark(#ffffff, #1c1c1c);
 }
 /* One bar, ruled off from the graph below it. */
 [data-compact-room] [data-compact='root'] [data-chrome='toolbar'] {
   margin: 0;
   padding: 6px 12px;
   border: 0;
-  border-bottom: 1px solid #dde1e7;
+  border-bottom: 1px solid light-dark(#dde1e7, #3a3a3a);
   border-radius: 0;
   box-shadow: none;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 [data-compact-room] [data-compact='root'] > div:first-child {
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 [data-compact-room] [data-compact='root'] button {
   min-height: 28px;
@@ -102,12 +111,12 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
 }
 /* The White appearance gives the sidebar a cream hover, a warm hairline and sage labels: here they are the neutral greys. */
 [data-compact-room] [data-compact='root'] [data-chrome='sidebar']:not(#_) {
-  --pure-chrome-line: #dde1e7;
-  --pure-chrome-fence: #dde1e7;
-  --pure-chrome-hover: #f5f6f8;
-  --pure-chrome-selection: #eef0f3;
-  --pure-chrome-muted: #5d6674;
-  --pure-chrome-soft: #3f4754;
+  --pure-chrome-line: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-fence: light-dark(#dde1e7, #3a3a3a);
+  --pure-chrome-hover: light-dark(#f5f6f8, #272727);
+  --pure-chrome-selection: light-dark(#eef0f3, #2c2c2c);
+  --pure-chrome-muted: light-dark(#5d6674, #bdbdbd);
+  --pure-chrome-soft: light-dark(#3f4754, #ededed);
 }
 [data-compact-room] [data-compact='root'] [data-compact='host']:not(#_) {
   margin: 0;
@@ -118,8 +127,8 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
 [data-compact-room] [data-chrome='sidebar']:not(#_) {
   padding-top: 12px;
   overflow-x: hidden;
-  border-right: 1px solid #dde1e7;
-  background: #ffffff;
+  border-right: 1px solid light-dark(#dde1e7, #3a3a3a);
+  background: light-dark(#ffffff, #1c1c1c);
 }
 [data-compact-room] [data-chrome='sidebar'] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
 [data-compact-room] [data-chrome='sidebar'] select,
@@ -128,10 +137,10 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   min-width: 0;
   width: 100%;
   min-height: 28px;
-  border: 1px solid #cdd1d7;
+  border: 1px solid light-dark(#cdd1d7, #4a4a4a);
   border-radius: 3px;
   box-shadow: none;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
 }
 [data-compact-room] [data-chrome='sidebar'] label,
 [data-compact-room] [data-chrome='sidebar'] label > * {
@@ -140,9 +149,9 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
 [data-compact-room] [data-compact='root'] nav {
   padding: 0;
   gap: 0;
-  border: 1px solid #cdd1d7;
+  border: 1px solid light-dark(#cdd1d7, #4a4a4a);
   border-radius: 3px;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   overflow: hidden;
 }
 [data-compact-room] [data-compact='root'] nav button {
@@ -151,11 +160,11 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
   background: transparent;
 }
 [data-compact-room] [data-compact='root'] nav button + button {
-  border-left: 1px solid #dde1e7;
+  border-left: 1px solid light-dark(#dde1e7, #3a3a3a);
 }
 [data-compact-room] [data-compact='root'] nav button[aria-pressed='true'] {
   box-shadow: none;
-  background: #eef0f3;
+  background: light-dark(#eef0f3, #2c2c2c);
   font-weight: 600;
 }
 /* Labels in the app's sans, sentence case, no letter-spacing. */
@@ -176,19 +185,19 @@ html[data-held-in-room]:has([data-compact-room]):not(#_) body {
 [data-compact-room] [data-chrome='sidebar'] details {
   border-width: 1px 0 0;
   border-radius: 0;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   padding-left: 0;
   padding-right: 0;
 }
 [data-compact-room] [data-chrome='sidebar'] div[class]:has(> [data-chrome='meta']):not(:has(input)) {
   border-width: 1px 0 0;
   border-radius: 0;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   padding-left: 0;
   padding-right: 0;
 }
 [data-compact-room] [data-chrome='sidebar'] div[class]:has(> [data-chrome='section-label']) {
   border-radius: 3px;
-  background: #ffffff;
+  background: light-dark(#ffffff, #1c1c1c);
   font-variant-numeric: tabular-nums;
 }
