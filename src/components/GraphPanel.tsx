@@ -39,6 +39,11 @@ export const GraphPanel = styled.section`
     h2 { font-size: 14px; font-weight: 600; }
     input:not([type=checkbox]):not([type=color]), textarea, button { border-radius: var(--pure-chrome-radius, 3px); }
     input::file-selector-button { border-radius: 2px; }
+    /* Buttons are raised plain; a chosen option takes the shared selected look. */
+    button { border: 1px solid var(--n-btn-line); border-bottom-color: var(--n-btn-foot); background: var(--n-sheet); box-shadow: 0 1px 1px rgb(0 0 0 / 0.08); color: var(--n-ink); font-weight: 600; }
+    button:hover:not(:disabled) { border-color: var(--n-btn-foot); background: var(--n-hover); }
+    button:disabled { border-color: var(--n-fence); background: var(--n-panel); box-shadow: none; color: var(--n-faint); opacity: 1; }
+    button[aria-pressed=true] { border-color: transparent; background: var(--p-chosen); box-shadow: var(--p-chosen-edge); }
   }
 `
 

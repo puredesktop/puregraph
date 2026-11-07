@@ -115,7 +115,8 @@ const chrome = (kind: string): Record<string, string> => ({ 'data-chrome': kind 
 // for the dark theme by --pure-chrome-accent. The graph itself keeps the
 // document's own colours.
 const Root = styled.div`
-  --canvas: var(--platform-colors-bg, #f5f7f8);
+  /* The page is white (ui/look.ts); parts are told apart by hairlines and a shade of grey. */
+  --canvas: var(--n-sheet, var(--platform-colors-bg, #f5f7f8));
   --ink-faint: var(--pure-chrome-muted, #67727d);
   --surface: var(--pure-chrome-surface);
 
@@ -194,7 +195,12 @@ const Button = styled.button`
     opacity: 0.55;
   }
 
-  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+  ${enterprise} & {
+    border-radius: var(--pure-chrome-radius, 3px);
+    border-color: var(--p-text); background: var(--p-text); color: var(--p-on-text); font-weight: 600;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.24);
+  }
+  ${enterprise} &:hover:not(:disabled) { filter: none; border-color: var(--p-deep); background: var(--p-deep); }
 `
 
 const GhostButton = styled(Button)`
@@ -207,6 +213,11 @@ const GhostButton = styled(Button)`
     filter: none;
     background: var(--pure-chrome-hover);
   }
+
+  /* Every action that is not the main one: raised plain, on a firm edge. */
+  ${enterprise} && { border: 1px solid var(--n-btn-line); border-bottom-color: var(--n-btn-foot); background: var(--n-sheet); box-shadow: 0 1px 1px rgb(0 0 0 / 0.08); color: var(--n-ink); font-weight: 600; }
+  ${enterprise} &&:hover:not(:disabled) { border-color: var(--n-btn-foot); background: var(--n-hover); }
+  ${enterprise} &&:disabled { border-color: var(--n-fence); background: var(--n-panel); box-shadow: none; color: var(--n-faint); opacity: 1; }
 `
 
 /** Icon-only toolbar button that closes and reopens the controls column. */
@@ -240,13 +251,17 @@ const Navigation = styled.nav`
     box-shadow: 0 1px 3px #0000000a;
     font-weight: 600;
   }
-  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
-  ${enterprise} && button { border-radius: 2px; }
-  ${enterprise} && button[aria-pressed='true'] { box-shadow: none; }
+  /* The open tab takes the shared selected look; no box round the row. */
+  ${enterprise} & { padding: 0; border: 0; border-radius: 0; background: transparent; }
+  ${enterprise} && button { border-color: transparent; border-radius: 3px; background: transparent; box-shadow: none; color: var(--n-soft); font-weight: 500; }
+  ${enterprise} && button:hover:not([aria-pressed='true']) { border-color: transparent; background: var(--n-hover); color: var(--n-ink); }
+  ${enterprise} && button[aria-pressed='true'] { border-color: transparent; background: var(--p-chosen); box-shadow: var(--p-chosen-edge); color: var(--n-ink); font-weight: 600; }
 `
 
 const Workspace = styled.div`
   button[aria-pressed='true'] { font-weight: 600; background: var(--pure-chrome-hover, #e8eeee); }
+  /* A chosen option takes the shared selected look. */
+  ${enterprise} && button[aria-pressed='true'] { border-color: transparent; background: var(--p-chosen); box-shadow: var(--p-chosen-edge); color: var(--n-ink); }
   button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
     outline: 2px solid var(--pure-chrome-accent, #267b66);
     outline-offset: 2px;
@@ -376,7 +391,7 @@ const Stat = styled.div`
   min-width: 0;
   border: 1px solid var(--pure-chrome-line);
   border-radius: var(--pure-chrome-radius);
-  background: var(--pure-chrome-well);
+  background: var(--n-sheet, var(--pure-chrome-well));
   padding: 6px 8px;
 `
 
