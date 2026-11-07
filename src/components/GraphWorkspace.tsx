@@ -252,7 +252,11 @@ const Navigation = styled.nav`
     font-weight: 600;
   }
   /* The open tab takes the shared selected look; no box round the row. */
-  ${enterprise} & { padding: 0; border: 0; border-radius: 0; background: transparent; }
+  ${enterprise} & {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 2px;
+    margin: 0 -12px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--n-line); border-radius: 0; background: transparent;
+  }
+  ${enterprise} && button { min-height: 28px; padding: 0 4px; }
   ${enterprise} && button { border-color: transparent; border-radius: 3px; background: transparent; box-shadow: none; color: var(--n-soft); font-weight: 500; }
   ${enterprise} && button:hover:not([aria-pressed='true']) { border-color: transparent; background: var(--n-hover); color: var(--n-ink); }
   ${enterprise} && button[aria-pressed='true'] { border-color: transparent; background: var(--p-chosen); box-shadow: var(--p-chosen-edge); color: var(--n-ink); font-weight: 600; }
@@ -267,7 +271,7 @@ const Workspace = styled.div`
     outline-offset: 2px;
   }
   display: grid;
-  grid-template-columns: minmax(0, var(--graph-panel-width, 360px)) minmax(120px, 1fr);
+  grid-template-columns: minmax(0, var(--graph-panel-width, 320px)) minmax(120px, 1fr);
   @media (max-width: 700px) { grid-template-columns: minmax(0, min(var(--graph-panel-width, 320px), calc(100vw - 140px))) minmax(120px, 1fr); }
   min-width: 0;
   min-height: 0;
@@ -280,11 +284,12 @@ const Panel = styled(AppSidebar)`
   && {
   display: grid;
   align-content: start;
-  gap: 20px;
+  gap: 0;
   overflow-y: auto;
   scrollbar-width: thin;
   min-width: 0;
-  padding: 0 16px 24px;
+  /* One column grid: tabs on top, then each group on its own band, ruled by a hairline. */
+  padding: 0 12px 12px;
   width: auto;
   box-sizing: border-box;
   border: 0;
@@ -297,7 +302,21 @@ const Panel = styled(AppSidebar)`
 const Section = styled.section`
   &[hidden] { display: none; }
   display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--n-fence, var(--pure-chrome-line));
+`
+
+/** How wide the controls are: a quiet setting at the foot of the column, label and slider on one line. */
+const PaneWidth = styled.label`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
+  padding: 12px 0 0;
+  color: var(--pure-chrome-muted, #67727d);
+  font-size: 12px;
+  input { width: 100%; margin: 0; accent-color: var(--p-text, var(--pure-chrome-accent)); }
 `
 
 // The sidebar already carries the inset, so section labels sit flush.
@@ -347,11 +366,12 @@ const Details = styled.details`
   border: 1px solid var(--pure-chrome-line);
   border-radius: var(--pure-chrome-radius);
   background: var(--pure-chrome-surface);
-  padding: 10px 12px;
+  padding: 6px 10px;
 
   &[open] {
     display: grid;
-    gap: 12px;
+    gap: 8px;
+    padding-bottom: 10px;
   }
 `
 
@@ -441,9 +461,10 @@ const ColorInput = styled.input`
   padding: 3px;
 `
 
+/** Buttons in a group share one grid: two equal columns, so their edges line up down the column. */
 const ButtonRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 `
 
@@ -508,7 +529,7 @@ export function GraphWorkspace({
   compact = false,
 }: GraphWorkspaceProps): React.ReactElement {
   const [activePanel, setActivePanel] = useState('Graph')
-  const [panelWidth, setPanelWidth] = useState(360)
+  const [panelWidth, setPanelWidth] = useState(320)
   // The controls column can be closed so the graph takes the room; the
   // choice is remembered across reloads.
   const [wholeAppControlsOpen, setWholeAppControlsOpen] = usePanelOpen('puregraph.controlsOpen')
@@ -1042,7 +1063,6 @@ export function GraphWorkspace({
       </div>
       <Workspace data-controls-hidden={collapsed} {...compactPart(compact, 'workspace')} style={{ '--graph-panel-width': `${activePanel === 'Data' ? Math.max(panelWidth, 520) : panelWidth}px` } as React.CSSProperties}>
         <Panel id="puregraph-controls" aria-label="Graph controls" hidden={collapsed}>
-          <label style={{ fontSize: 11 }} {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></label>
           <Navigation aria-label="Graph workspace">
             {['Data', 'Graph', 'Explore', 'Style', 'Review', 'Export'].map(panel => <GhostButton key={panel} {...compactPart(compact && !['Data', 'Graph', 'Style'].includes(panel), 'hide')} aria-pressed={activePanel === panel} onClick={() => setActivePanel(panel)}>{panel}</GhostButton>)}
           </Navigation>
@@ -1066,7 +1086,7 @@ export function GraphWorkspace({
 
           <div hidden={activePanel !== 'Data'}><GraphData elements={currentDocument.elements} documentKey={documentPath ?? documentTitle} onCommand={onCommand} selected={selectedIds} onSelect={selectElements} /></div>
           <div hidden={activePanel !== 'Explore'}><GraphExplore key={documentPath ?? documentTitle} document={currentDocument} selectedIds={selectedIds} view={view} onView={changeExploreView} onSelect={selectElements} onCommand={onCommand} onFit={fit} onSaveView={saveView} onOpenView={openView} /></div>
-          <Section hidden={activePanel !== 'Graph'}>
+          <Section hidden={activePanel !== 'Graph' || SAMPLE_GRAPHS.length === 0}>
             {SAMPLE_GRAPHS.length > 0 && <Details><Summary>Start from a sample</Summary>
               {SAMPLE_GRAPHS.map(sample => <GhostButton key={sample.id} onClick={() => { void loadSample(sample).catch(error => setStatus(String(error))) }}>{sample.name}</GhostButton>)}
             </Details>}
@@ -1331,7 +1351,8 @@ export function GraphWorkspace({
           </Section>
 
           {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
-          {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}        </Panel>
+          {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}          <PaneWidth {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></PaneWidth>
+        </Panel>
         <GraphHost style={{ background: drawnBackground }} {...compactPart(compact, 'host')}>
           <GraphCanvas ref={containerRef} {...agentRefs(['@open', documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
