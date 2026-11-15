@@ -518,7 +518,7 @@
         },
         {
           "name": "exportGraph",
-          "risk": "external",
+          "risk": "write",
           "description": "Export the graph as an offline interactive HTML explorer, SVG, PNG, or editable JSON. HTML includes visual fields only by default.",
           "inputSchema": {
             "type": "object",
