@@ -6,8 +6,17 @@ import { useMemo, useState } from 'react'
 import type { GraphDocument } from '../lib/graphDocument'
 import { DEFAULT_GRAPH_STYLE, normalizeGraphStyle } from '../lib/graphDocument'
 import type { GraphStyleState } from '../agents/context'
-import { graphLegend } from '../lib/graphLegend'
+import { graphCategoryLegend } from '../lib/graphLegend'
 import { enterprise } from '../enterpriseLook'
+
+function toColorInputValue(color: string, fallback = '#668b9b'): string {
+  const trimmed = color.trim()
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return '#' + trimmed.slice(1).split('').map(c => c + c).join('')
+  }
+  return fallback
+}
 const Presets = styled(GraphPanel)`
   input[type=color] { padding: 3px; width: 38px; height: 30px; border: 1px solid var(--pure-chrome-line, #dce1e5); border-radius: 6px; background: var(--pure-chrome-surface, white); }
   ${enterprise} & input[type=color] { border-radius: 2px; }
@@ -26,7 +35,13 @@ export function GraphStylePresets({ document, onStyle, onCommand }: { document: 
   const [name, setName] = useState(''), [error, setError] = useState('')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const palette = useMemo(() => { if (!paletteOpen) return { plan: null, error: '' }; try { return { plan: graphPalettePlan(document), error: '' } } catch (error) { return { plan: null, error: String(error) } } }, [document, paletteOpen])
-  const categories = [...new Set(graphLegend(document).map(entry => entry.label))]
+  const categoryEntries = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const entry of graphCategoryLegend(document)) {
+      if (!map.has(entry.label)) map.set(entry.label, entry.color)
+    }
+    return [...map.entries()]
+  }, [document])
   return <Presets aria-label="Style presets">
     <h2 style={{ fontSize: 16, margin: 0 }}>Style</h2>
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{Object.entries({ ...BUILTIN, ...presets }).map(([title, style]) => <button key={title} onClick={() => onStyle({ ...style, categoryColors: style.categoryColors ?? {}, showLegend: style.showLegend ?? false })}>{title}</button>)}</div>
@@ -45,7 +60,7 @@ export function GraphStylePresets({ document, onStyle, onCommand }: { document: 
     <label>Preset name<input value={name} onChange={event => setName(event.target.value)} /></label>
     <button disabled={!name.trim()} onClick={() => { try { const next = { ...presets, [name.trim()]: document.style }; localStorage.setItem(KEY, JSON.stringify(next)); setPresets(next); setError('') } catch { setError('Could not store this preset. The document still keeps its styling.') } }}>Save current style</button>
     <label><input type="checkbox" checked={document.style.showLegend ?? false} onChange={event => onStyle({ showLegend: event.target.checked })} /> Show category legend</label>
-    {categories.map(category => <label key={category} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>{category}<input aria-label={`${category} category color`} type="color" value={document.style.categoryColors?.[category] ?? graphLegend(document).find(entry => entry.label === category)!.color} onChange={event => onStyle({ categoryColors: { ...document.style.categoryColors, [category]: event.target.value } })} /></label>)}
+    {categoryEntries.map(([category, fallbackColor]) => <label key={category} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>{category}<input aria-label={`${category} category color`} type="color" value={toColorInputValue(document.style.categoryColors?.[category] ?? fallbackColor)} onChange={event => onStyle({ categoryColors: { ...document.style.categoryColors, [category]: event.target.value } })} /></label>)}
     {error && <p role="alert">{error}</p>}
   </Presets>
 }

@@ -10,7 +10,13 @@ export interface GraphViewState {
 }
 export interface GraphSavedView { id: string; name: string; caption: string; state: GraphViewState; selectedIds: string[]; viewport?: { zoom: number; pan: { x: number; y: number } } }
 export const emptyGraphView = (): GraphViewState => ({ hiddenIds: [], hiddenCategories: [], focusIds: null, mode: 'hide' })
-export const graphCategory = (element: GraphElement) => String(element.data.category ?? element.data.cluster ?? 'Nodes')
+export const graphCategory = (element: GraphElement) => {
+  const category = element.data.category
+  if (category !== undefined && category !== null && String(category).trim()) return String(category).trim()
+  const cluster = element.data.cluster
+  if (cluster !== undefined && cluster !== null && String(cluster).trim()) return String(cluster).trim()
+  return 'Nodes'
+}
 export function viewElements(elements: GraphElement[], state: GraphViewState): GraphElement[] {
   const hidden = new Set(state.hiddenIds), categories = new Set(state.hiddenCategories), focus = state.focusIds ? new Set(state.focusIds) : null
   const matches = (element: GraphElement) => {

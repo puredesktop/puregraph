@@ -63,7 +63,7 @@ export function GraphData({ elements, documentKey, onCommand, selected, onSelect
         }} /></td>)}
       </tr>)}</tbody>
     </table></div>
-    <ControlRow><button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button> <button disabled={(page + 1) * 30 >= filtered.length} onClick={() => setPage(page + 1)}>Next</button></ControlRow>
+    <ControlRow><button disabled={effectivePage === 0} onClick={() => setPage(Math.max(0, effectivePage - 1))}>Previous</button> <button disabled={(effectivePage + 1) * 30 >= filtered.length} onClick={() => setPage(effectivePage + 1)}>Next</button></ControlRow>
     {selected.length > 0 && <>
       <label>Label for selected elements<input value={label} onChange={event => setLabel(event.target.value)} /></label>
       <button onClick={() => commit([{ type: 'update', ids: selected, data: { label } }])}>Apply label to selected</button>

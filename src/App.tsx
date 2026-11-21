@@ -31,7 +31,6 @@ import { useGraphRecovery } from './hooks/useGraphRecovery'
 import { useGraphSession } from './hooks/useGraphSession'
 import { usePureGraphBoot } from './hooks/usePureGraphBoot'
 import {
-  graphContentFingerprint,
   DEFAULT_GRAPH_TITLE,
   defaultGraphDocument,
   graphDocumentFromSample,
@@ -119,12 +118,11 @@ function GraphDocumentApp({
 }: GraphDocumentAppProps): React.ReactElement {
   const recovery = useGraphRecovery()
   const session = useGraphSession()
-  const { document, adopt: adoptDocument, commit: setDocument } = session
+  const { document, adopt: adoptDocument, commit: setDocument, replacePresent } = session
   const navigationRef = useRef(0)
   const restoredLastDocument = useRef(false)
   // The live document, kept current synchronously by every writer.
   const documentRef = useRef(document)
-  const savedContentRef = useRef<string | null>(graphContentFingerprint(document))
   // What serialize writes: the document of the package the lifecycle is
   // bound to. Both refs are assigned together with every rebind, so a
   // switch mid-flight never writes one graph's content into another's
@@ -164,7 +162,6 @@ function GraphDocumentApp({
         if (saveOutgoing) await lifecycle.flush({ throwOnError: true })
         if (ticket !== navigationRef.current) return false
         if (documentRef.current !== outgoing) { setMessage('The graph changed while saving. Your edits are still open; try the document action again.'); return false }
-        savedContentRef.current = persist ? null : graphContentFingerprint(seed)
         boundPathRef.current = null
         boundDocumentRef.current = seed
         documentRef.current = seed
@@ -173,7 +170,7 @@ function GraphDocumentApp({
         adoptDocument(seed)
         setLoadedDocument({ document: seed, nonce: Date.now() })
         setMessage(notice)
-        if (persist) recovery.capture(seed, null)
+        if (persist && !recovery.capture(seed, null)) return false
         return true
       } catch (error) {
         setMessage(`Could not save the current graph: ${errorMessage(error)}`)
@@ -228,7 +225,6 @@ function GraphDocumentApp({
           if (ticket !== navigationRef.current || documentRef.current !== atStart) return
           lifecycle.adopt(packagePath, { title: next.title })
         }
-        savedContentRef.current = graphContentFingerprint(next)
         boundPathRef.current = packagePath
         boundDocumentRef.current = next
         documentRef.current = next
@@ -268,7 +264,7 @@ function GraphDocumentApp({
     },
     onSaved: files => {
       const content = files.find(file => file.name === GRAPH_DOCUMENT_FILE)?.content
-      if (typeof content === 'string') { savedContentRef.current = graphContentFingerprint(parseGraphDocument(content)); recovery.saved(content) }
+      if (typeof content === 'string') recovery.saved(content)
     },
     serialize: () => {
       const current = boundDocumentRef.current
@@ -330,7 +326,7 @@ function GraphDocumentApp({
   }, [lifecycle.doc.path, session.bindKey])
 
   // A filed or renamed package names the graph; keep the in-memory title
-  // (export names, agent context) in step with it.
+  // (export names, agent context) in step with it without pushing a spurious Undo step.
   useEffect(() => {
     const title = lifecycle.doc.title
     if (!lifecycle.doc.path || !title || title === documentRef.current.title) {
@@ -339,8 +335,8 @@ function GraphDocumentApp({
     const next = { ...documentRef.current, title }
     documentRef.current = next
     boundDocumentRef.current = next
-    setDocument(next)
-  }, [lifecycle.doc.path, lifecycle.doc.title])
+    replacePresent(next)
+  }, [lifecycle.doc.path, lifecycle.doc.title, replacePresent])
 
   useEffect(() => {
     if (!persistAfterCommitRef.current) return

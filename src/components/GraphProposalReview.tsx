@@ -57,8 +57,11 @@ export function GraphProposalReview({ document, proposal, onApply, onDiscard }: 
   const [previews, setPreviews] = useState<string[]>([])
   useEffect(() => { setOpen(false); setError('') }, [proposal?.id])
   useEffect(() => {
-    if (open) dialog.current?.showModal()
-    else dialog.current?.close()
+    if (open) {
+      if (dialog.current && !dialog.current.open) dialog.current.showModal()
+    } else if (dialog.current?.open) {
+      dialog.current.close()
+    }
   }, [open])
   useEffect(() => {
     if (!open || !proposal) return

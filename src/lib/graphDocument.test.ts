@@ -8,7 +8,28 @@ import {
   parseGraphDocument,
   serializeGraphDocument,
 } from './graphDocument'
-import { SAMPLE_GRAPHS } from './graphParser'
+import { SAMPLE_GRAPHS, type GraphSample } from './graphParser'
+
+const TEST_SAMPLES: GraphSample[] = [
+  {
+    id: 'urban-systems',
+    name: 'Urban Systems',
+    layout: 'cose',
+    style: { backgroundColor: '#ffffff', directed: true },
+    data: 'source,target,label\nsatellite,heat,surface temp\nheat,grid,peak load\ngrid,transit,power\n',
+  },
+  {
+    id: 'pathway-atlas',
+    name: 'Pathway Atlas',
+    layout: 'preset',
+    style: { backgroundColor: '#ffffff', directed: false },
+    data: JSON.stringify([
+      { group: 'nodes', data: { id: 'p1', label: 'Sensor' }, position: { x: 0, y: 0 } },
+      { group: 'nodes', data: { id: 'p2', label: 'Mediator' }, position: { x: 120, y: 40 } },
+      { group: 'edges', data: { id: 'e1', source: 'p1', target: 'p2', label: 'activates' } },
+    ]),
+  },
+]
 
 describe('graph document', () => {
   it('starts empty: a new graph ships no sample data', () => {
@@ -17,10 +38,11 @@ describe('graph document', () => {
     expect(document.title).toBe(DEFAULT_GRAPH_TITLE)
     expect(document.layout).toBe('cose')
     expect(document.style).toEqual(DEFAULT_GRAPH_STYLE)
+    expect(SAMPLE_GRAPHS).toEqual([])
   })
 
   it('round-trips a .graph document payload', () => {
-    const document = graphDocumentFromSample(SAMPLE_GRAPHS[0])
+    const document = graphDocumentFromSample(TEST_SAMPLES[0])
     const parsed = parseGraphDocument(serializeGraphDocument(document))
 
     expect(parsed.title).toBe(document.title)
@@ -31,12 +53,13 @@ describe('graph document', () => {
   })
 
   it('builds a sample only on request, with its own title and style', () => {
-    const sample = SAMPLE_GRAPHS.find(item => item.id === 'pathway-atlas')!
+    const sample = TEST_SAMPLES.find(item => item.id === 'pathway-atlas')!
     const document = graphDocumentFromSample(sample)
     expect(document.title).toBe('Pathway Atlas')
     expect(document.layout).toBe('preset')
     expect(document.style.directed).toBe(false)
     expect(document.elements.length).toBeGreaterThan(0)
+    expect(document.elements[0].data.synthetic).toBe(true)
   })
 
   it('reads the createEntities template as an empty untitled graph', () => {

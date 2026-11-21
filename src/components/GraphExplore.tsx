@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { GraphPanel, ControlRow } from './GraphPanel'
 import { GraphNodePicker } from './GraphNodePicker'
 import { GraphField } from './GraphField'
@@ -16,12 +16,30 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
   const [query, setQuery] = useState(''), [offset, setOffset] = useState(0), [depth, setDepth] = useState(1)
   const [start, setStart] = useState(''), [end, setEnd] = useState(''), [message, setMessage] = useState('')
   const [name, setName] = useState(''), [caption, setCaption] = useState(''), [comparison, setComparison] = useState('')
+  const [timeFieldDraft, setTimeFieldDraft] = useState(view.time?.field || '')
+  const viewRef = useRef(view); viewRef.current = view
+  const onViewRef = useRef(onView); onViewRef.current = onView
+  useEffect(() => { setTimeFieldDraft(view.time?.field || '') }, [view.time?.field])
+  useEffect(() => {
+    if (timeFieldDraft === (viewRef.current.time?.field || '')) return
+    const timer = window.setTimeout(() => {
+      onViewRef.current({ ...viewRef.current, time: { field: timeFieldDraft, from: viewRef.current.time?.from || '', to: viewRef.current.time?.to || '' } })
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [timeFieldDraft])
   const shown = useMemo(() => viewElements(document.elements, view), [document.elements, view])
   const matches = useMemo(() => queryGraph(document.elements, { query, offset, limit: 30 }), [document.elements, query, offset])
   const categories = [...new Set(document.elements.filter(element => !element.data.source).map(graphCategory))].sort()
   const selected = document.elements.find(element => element.data.id === selectedIds[0])
   const run = (action: () => void) => { try { action(); setMessage('') } catch (error) { setMessage(String(error)) } }
   const focus = (ids: string[]) => { onSelect(ids); onView({ ...view, focusIds: ids }) }
+  const focusSelection = () => {
+    const selectedSet = new Set(selectedIds)
+    const inducedEdges = document.elements
+      .filter(element => element.data.source !== undefined && selectedSet.has(String(element.data.source)) && selectedSet.has(String(element.data.target)))
+      .map(element => element.data.id!)
+    focus([...new Set([...selectedIds, ...inducedEdges])])
+  }
   function evidence(field: string, value: string) {
     if (field === 'sourceUrl' && value && !/^https?:\/\/\S+$/i.test(value)) throw new Error('Use a full http:// or https:// source URL.')
     if (field === 'confidence' && value && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1)) throw new Error('Confidence must be between 0 and 1.')
@@ -36,7 +54,7 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
     <details><summary>Categories and focus</summary>
       {categories.map(category => <label key={category} {...categoryRefs(category)}><span><input type="checkbox" checked={!view.hiddenCategories.includes(category)} onChange={event => onView({ ...view, hiddenCategories: event.target.checked ? view.hiddenCategories.filter(item => item !== category) : [...view.hiddenCategories, category] })} /> {category}</span></label>)}
       <label><span><input type="checkbox" checked={view.mode === 'dim'} onChange={event => onView({ ...view, mode: event.target.checked ? 'dim' : 'hide' })} /> Dim excluded elements instead of hiding</span></label>
-      <button disabled={!selectedIds.length} onClick={() => focus(selectedIds)}>Focus selection</button>
+      <button disabled={!selectedIds.length} onClick={focusSelection}>Focus selection</button>
     </details>
     <h3>Connections</h3>
     <p>{selected && !selected.data.source ? `Around ${selected.data.label || selected.data.id}` : 'Select a node on the canvas, in search, or in Data.'}</p>
@@ -62,7 +80,10 @@ export function GraphExplore({ document, selectedIds, view, onView, onSelect, on
       <p>Views and captions are saved with the graph and can be included in HTML exports.</p>
     </details>
     <details><summary>What-if scenario</summary><p>Temporarily exclude selected nodes or relationships. The underlying graph stays intact.</p><button disabled={!selectedIds.length} onClick={() => onView({ ...view, hiddenIds: [...new Set([...view.hiddenIds, ...selectedIds])] })}>Exclude selection</button><p>{view.hiddenIds.length} excluded · {connectedComponents(shown).length} components now; {connectedComponents(document.elements).length} in the full graph.</p><button onClick={() => onView({ ...view, hiddenIds: [] })}>Restore excluded elements</button></details>
-    <details><summary>Time window</summary><p>Filter a date attribute. Undated elements remain visible; invalid dates are excluded.</p>{(['field', 'from', 'to'] as const).map(field => <label key={field}>{field}<input type={field === 'field' ? 'text' : 'date'} value={view.time?.[field] || ''} onChange={event => onView({ ...view, time: { field: '', from: '', to: '', ...view.time, [field]: event.target.value } })} /></label>)}</details>
+    <details><summary>Time window</summary><p>Filter a date attribute. Undated elements remain visible; invalid dates are excluded.</p>
+      <label>field<input type="text" value={timeFieldDraft} onChange={event => setTimeFieldDraft(event.target.value)} /></label>
+      {(['from', 'to'] as const).map(field => <label key={field}>{field}<input type="date" value={view.time?.[field] || ''} onChange={event => onView({ ...view, time: { from: '', to: '', ...view.time, field: timeFieldDraft, [field]: event.target.value } })} /></label>)}
+    </details>
     <details><summary>Compare another graph</summary><p>Comparison uses element IDs. Nothing is imported until you choose an import action in Data.</p><textarea aria-label="Graph comparison data" value={comparison} onChange={event => setComparison(event.target.value)} /><button onClick={() => { try { const diff = compareGraphElements(document.elements, previewGraphImport(comparison).elements); setMessage(`Added: ${diff.added.join(', ') || 'none'}. Removed: ${diff.removed.join(', ') || 'none'}. Changed: ${diff.changed.join(', ') || 'none'}.`) } catch (error) { setMessage(String(error)) } }}>Compare</button></details>
     <p role="status">{message}</p>
   </GraphPanel>

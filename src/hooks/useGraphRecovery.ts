@@ -9,6 +9,7 @@ export function useGraphRecovery() {
   const [error, setError] = useState<string | null>(null)
   const refreshGeneration = useRef(0)
   const refresh = useCallback(async () => {
+    if (!navigator.locks) return
     const generation = ++refreshGeneration.current
     try {
       const next = await availableRecoveries(localStorage, navigator.locks, id.current)
@@ -28,7 +29,7 @@ export function useGraphRecovery() {
       }).catch(failure => {
         if (failure?.name !== 'AbortError') setError('Could not register this window for recovery. Keep unsaved work open until it saves.')
       })
-    } else void refresh()
+    }
     const update = () => { void refresh() }
     window.addEventListener('storage', update)
     window.addEventListener('focus', update)
@@ -71,8 +72,7 @@ export function useGraphRecovery() {
   const discard = useCallback((entryId: string) => claim(entryId, () => true), [claim])
   const recover = useCallback((entryId: string, apply: (document: GraphDocument) => Promise<boolean>) => claim(entryId, async entry => {
     const recovered = { ...entry.document, title: `${entry.document.title} — recovered` }
-    if (!await apply(recovered)) return false
-    return capture(recovered, null)
-  }), [capture, claim])
+    return await apply(recovered)
+  }), [claim])
   return { entries, error, capture, saved, discard, recover }
 }

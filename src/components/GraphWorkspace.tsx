@@ -2,7 +2,8 @@ import { CrossAppDragHandle } from '@purescience/platform-ui/components/assets/C
 import { svgAssetDataUrl } from '@purescience/platform-editor'
 import { graphExportDocument } from '../lib/graphExportScope'
 import { layoutGraphAsync } from '../lib/graphLayoutAsync'
-import { applyGraphCommands } from '../lib/graphCommands'
+import { alignNodePositions, distributeNodePositions, type GraphAlignMode, type GraphDistributeAxis } from '../lib/graphLayout'
+import { applyGraphCommands, isEdge } from '../lib/graphCommands'
 import { GraphEncodings } from './GraphEncodings'
 import { graphPalettePlan } from '../lib/graphPalette'
 import { GraphExplore } from './GraphExplore'
@@ -13,12 +14,13 @@ import { SelectField } from '@purescience/platform-ui/components/common/inputs/S
 import { GraphStylePresets } from './GraphStylePresets'
 import { graphLegend } from '../lib/graphLegend'
 import type { GraphProposal } from '../lib/graphProposal'
-import { GraphExport } from './GraphExport'
+import { GraphExport, type GraphUiExportFormat } from './GraphExport'
 import { graphSvg, pngFromGraphSvg, DEFAULT_EXPORT_OPTIONS, type GraphExportOptions } from '../canvas/graphExport'
 import { buildStyle } from '../canvas/graphStyle'
 import { GraphData } from './GraphData'
 import { GraphReview } from './GraphReview'
 import type { GraphCommand } from '../lib/graphCommands'
+import { graphEdgesCsv, graphNodesCsv } from '../lib/graphCsv'
 import cytoscape from 'cytoscape'
 import type {
   Core,
@@ -34,7 +36,6 @@ import {
   SidebarSectionLabel,
 } from '@purescience/platform-ui/components/common/containers/AppChrome'
 import {
-  DEFAULT_GRAPH_EXPORT_NAME,
   SUPPORTED_CURVE_STYLES,
   SUPPORTED_LAYOUTS,
   SUPPORTED_NODE_SHAPES,
@@ -63,11 +64,11 @@ import {
   type GraphElement,
   type GraphSample,
 } from '../lib/graphParser'
-import { restoreGraphCanvas, fromCyElements } from '../canvas/graphCanvas'
-import { DEFAULT_GRAPH_STYLE, serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
+import { restoreGraphCanvas } from '../canvas/graphCanvas'
+import { DEFAULT_GRAPH_STYLE, safeColorString, serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
 import { summarizeGraphContext } from '../lib/graphContext'
 import { readableTextColor } from '../lib/contrast'
-import { graphAssetExportPath, isGraphPackagePath } from '../lib/graphPaths'
+import { graphAssetExportPath, isGraphPackagePath, sanitizeFileName } from '../lib/graphPaths'
 import { graphFingerprint, livePathFor, withLiveSource } from '@purescience/platform-ui/components/assets/asset-library/model/live'
 import { GRAPH_APP_SLUG, GRAPH_ASSET_FIGURES_DIR } from '../constants'
 import type { PureGraphBootState } from '../types'
@@ -503,16 +504,97 @@ const EmptyOverlay = styled.div`
   button { pointer-events: auto; }
 `
 
-function sanitizeFileName(raw: string, extension: string): string {
-  const safe = (raw || DEFAULT_GRAPH_EXPORT_NAME)
-    .trim()
-    // An export name carrying the other format's extension ("graph.png" asked
-    // for as JSON) must not become "graph.png.json".
-    .replace(/\.(png|svg|json|html)$/i, '')
-    .replace(/[^\w.-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-  const base = safe || DEFAULT_GRAPH_EXPORT_NAME
-  return `${base}.${extension}`
+const ZoomControls = styled.div`
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--pure-chrome-line, #dce1e5);
+  border-radius: 8px;
+  background: var(--pure-chrome-surface, white);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  button {
+    min-height: 26px;
+    min-width: 28px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--platform-colors-text, #29333d);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) {
+    background: var(--pure-chrome-hover, #e8eeee);
+  }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+`
+
+const CanvasFloatingBar = styled.div`
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 96px);
+  padding: 5px 8px;
+  border: 1px solid var(--pure-chrome-line, #dce1e5);
+  border-radius: 8px;
+  background: var(--pure-chrome-surface, white);
+  color: var(--platform-colors-text, #29333d);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.1);
+  font-size: 12px;
+  input {
+    min-width: 140px;
+    max-width: 220px;
+    min-height: 26px;
+    padding: 3px 7px;
+    border: 1px solid var(--pure-chrome-line, #dce1e5);
+    border-radius: 5px;
+    background: var(--pure-chrome-paper, white);
+    color: inherit;
+    font: inherit;
+  }
+  button {
+    min-height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--pure-chrome-line, #dce1e5);
+    border-radius: 5px;
+    background: var(--pure-chrome-surface, white);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) {
+    background: var(--pure-chrome-hover, #e8eeee);
+  }
+  ${enterprise} & { border-radius: var(--pure-chrome-radius, 3px); }
+`
+
+const ThreeCol = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+`
+
+const EMPTY_IDS: string[] = []
+
+function toColorPickerHex(color: unknown, fallback: string): string {
+  const raw = typeof color === 'string' && color.trim() ? color.trim() : fallback.trim()
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    return '#' + raw.slice(1).split('').map(c => c + c).join('')
+  }
+  return /^#[0-9a-f]{6}$/i.test(fallback) ? fallback : '#668b9b'
 }
 
 export function GraphWorkspace({
@@ -570,9 +652,37 @@ export function GraphWorkspace({
   commandRef.current = onCommand
   const [graphVersion, setGraphVersion] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [documentSessionId, setDocumentSessionId] = useState(0)
+  const [zoomPercent, setZoomPercent] = useState(100)
+  const [connectMode, setConnectMode] = useState(false)
+  const [connectSource, setConnectSource] = useState<string | null>(null)
+  const connectModeRef = useRef(connectMode); connectModeRef.current = connectMode
+  const connectSourceRef = useRef(connectSource); connectSourceRef.current = connectSource
+  const [quickSearchOpen, setQuickSearchOpen] = useState(false)
+  const [quickSearchQuery, setQuickSearchQuery] = useState('')
+  const [quickSearchIndex, setQuickSearchIndex] = useState(0)
+  const quickSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const createDetailsRef = useRef<HTMLDetailsElement | null>(null)
+  const [bulkColor, setBulkColor] = useState('#668b9b')
+  const [bulkCategory, setBulkCategory] = useState('')
+  const messageRef = useRef(message); messageRef.current = message
+
+  // Keep activePanel on a visible tab when entering compact mode.
+  useEffect(() => {
+    if (compact && !['Data', 'Graph', 'Style'].includes(activePanel)) {
+      setActivePanel('Graph')
+    }
+  }, [compact, activePanel])
+
   // Export and cross-app dragging share one set of image settings.
   const [exportOptions, setExportOptions] = useState(DEFAULT_EXPORT_OPTIONS)
-  const dragRequest = useMemo(() => ({ document: currentDocument, options: exportOptions, visibleElements, selectedIds }), [currentDocument, exportOptions, visibleElements, selectedIds])
+  const dragScope = exportOptions.scope ?? 'all'
+  const dragVisible = dragScope === 'view' ? visibleElements : currentDocument.elements
+  const dragSelected = dragScope === 'selected' ? selectedIds : EMPTY_IDS
+  const dragRequest = useMemo(
+    () => ({ document: currentDocument, options: exportOptions, visibleElements: dragVisible, selectedIds: dragSelected }),
+    [currentDocument, exportOptions, dragVisible, dragSelected],
+  )
   const [dragSnapshot, setDragSnapshot] = useState<{ request: typeof dragRequest; dataUrl: string } | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -598,13 +708,16 @@ export function GraphWorkspace({
   }, [])
 
   const selectElements = useCallback((ids: string[]) => {
-    selectionRef.current = ids; setSelectedIds(ids)
+    const unique = [...new Set(ids)]
+    selectionRef.current = unique; setSelectedIds(unique)
     if (!cyRef.current) return
     suppressDocumentChangeRef.current = true
     cyRef.current.elements().unselect()
-    ids.forEach(id => cyRef.current!.getElementById(id).select())
+    unique.forEach(id => cyRef.current!.getElementById(id).select())
     suppressDocumentChangeRef.current = false
   }, [])
+  const selectElementsRef = useRef(selectElements)
+  selectElementsRef.current = selectElements
   const fitChangedView = useRef(false)
   const changeExploreView = useCallback((next: GraphViewState) => {
     fitChangedView.current = true
@@ -652,18 +765,27 @@ export function GraphWorkspace({
     if (!Array.isArray(commands) || !commands.length || commands.length > 1000) throw new Error('Provide between 1 and 1000 commands.')
     const base = currentDocument
     let next = base
-    for (const command of commands) next = command.type === 'layout' ? await prepareLayout(next, command.name, command.ids, command.direction) : applyGraphCommands(next, [command])
+    for (const command of commands) {
+      if (command && typeof command === 'object' && command.type === 'layout') {
+        if (!SUPPORTED_LAYOUTS.includes(command.name) || (command.direction !== undefined && !['down', 'right'].includes(command.direction))) {
+          throw new Error('Invalid layout or direction.')
+        }
+        if (command.ids !== undefined) {
+          if (!Array.isArray(command.ids) || command.ids.some(id => typeof id !== 'string')) {
+            throw new Error('IDs must be an array of strings.')
+          }
+          for (const id of command.ids) {
+            if (!next.elements.some(element => element.data.id === id)) throw new Error(`No element "${id}".`)
+          }
+        }
+        next = await prepareLayout(next, command.name, command.ids, command.direction)
+      } else {
+        next = applyGraphCommands(next, [command])
+      }
+    }
     if (liveDocument.current !== base) throw new Error('The document changed while preparing this proposal. Read context and prepare it again.')
     return onPropose(title, [{ type: 'document', document: next }])
   }, [currentDocument, onPropose, prepareLayout, proposal])
-
-  const applyGraphElements = useCallback(async (elements: GraphElement[], source: string | undefined, options: { replace?: boolean; layout?: GraphLayoutName } = {}): Promise<string> => {
-    if (currentDocument.elements.length && !options.replace) throw new GraphToolError('The graph is not empty. Use replace: true to replace it.')
-    const commands: GraphCommand[] = [{ type: 'replace', elements }]
-    if (options.layout) commands.push({ type: 'layout', name: options.layout })
-    onCommand(commands)
-    return `Loaded ${elements.length} elements${source ? ` from ${source}` : ''}.`
-  }, [onCommand, currentDocument])
 
   useEffect(() => {
     if (!containerRef.current || cyRef.current) return
@@ -672,6 +794,14 @@ export function GraphWorkspace({
       elements: [],
       style: buildStyle(drawnStyle),
     })
+    let dragTimer: number | null = null
+    const updateZoom = () => {
+      const level = cy.zoom()
+      if (typeof level === 'number' && Number.isFinite(level)) {
+        setZoomPercent(Math.round(level * 100))
+      }
+    }
+    cy.on('zoom', updateZoom)
     cy.on('select unselect', () => {
       if (suppressDocumentChangeRef.current) return
       selectionRef.current = cy.$(':selected').map(element => element.id())
@@ -680,15 +810,66 @@ export function GraphWorkspace({
     })
     cy.on('dragfree', () => {
       if (suppressDocumentChangeRef.current) return
-      const positions = Object.fromEntries(cy.nodes().map(node => [node.id(), { ...node.position() }]))
-      commandRef.current([{ type: 'positions', positions }])
+      if (dragTimer !== null) window.clearTimeout(dragTimer)
+      dragTimer = window.setTimeout(() => {
+        dragTimer = null
+        if (suppressDocumentChangeRef.current || !cyRef.current) return
+        try {
+          const positions = Object.fromEntries(cyRef.current.nodes().map(node => [node.id(), { ...node.position() }]))
+          commandRef.current([{ type: 'positions', positions }])
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : String(error))
+        }
+      }, 0)
+    })
+    cy.on('dbltap', event => {
+      if (event.target !== cy) return
+      const pos = event.position
+      if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return
+      const id = `n${crypto.randomUUID().slice(0, 8)}`
+      commandRef.current([{
+        type: 'add',
+        elements: [{ group: 'nodes', data: { id, label: id }, position: { x: Math.round(pos.x), y: Math.round(pos.y) } }],
+      }])
+      selectElementsRef.current([id])
+      setStatus(`Added node ${id}`)
+    })
+    cy.on('tap', 'node', event => {
+      if (!connectModeRef.current) return
+      const nodeId = event.target.id()
+      const currentSource = connectSourceRef.current
+      if (!currentSource) {
+        setConnectSource(nodeId)
+        selectElementsRef.current([nodeId])
+        setStatus(`Connect from ${String(event.target.data('label') || nodeId)}: click a target node (Esc to cancel)`)
+      } else {
+        const edgeId = `e${crypto.randomUUID().slice(0, 8)}`
+        try {
+          commandRef.current([{
+            type: 'add',
+            elements: [{ group: 'edges', data: { id: edgeId, source: currentSource, target: nodeId, label: '' } }],
+          }])
+          setStatus(`Connected ${currentSource} → ${nodeId}`)
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : String(error))
+        }
+        setConnectSource(null)
+      }
+    })
+    cy.on('tap', event => {
+      if (event.target === cy && connectModeRef.current && connectSourceRef.current) {
+        setConnectSource(null)
+        setStatus('Connect mode: click a source node')
+      }
     })
     const observer = new ResizeObserver(() => cy.resize())
     observer.observe(containerRef.current)
     cyRef.current = cy
+    updateZoom()
     setCyReady(true)
     setGraphVersion(version => version + 1)
     return () => {
+      if (dragTimer !== null) window.clearTimeout(dragTimer)
       observer.disconnect()
       cy.destroy()
       cyRef.current = null
@@ -706,55 +887,79 @@ export function GraphWorkspace({
   useEffect(() => {
     if (!cyRef.current) return
     cyRef.current.style(buildStyle(drawnStyle)).update()
-    cyRef.current.container()?.style.setProperty('background', drawnBackground)
+    cyRef.current.container()?.style.setProperty('background-color', safeColorString(drawnBackground, DEFAULT_GRAPH_STYLE.backgroundColor))
   }, [drawnBackground, drawnStyle])
 
   useEffect(() => {
     if (!loadedDocument || !cyRef.current) return
     const { document } = loadedDocument
+    const isNewDocument = loadedDocument.resetView !== false
     suppressDocumentChangeRef.current = true
     try {
       const cy = cyRef.current
-      restoreGraphCanvas(cy, document, loadedDocument.resetView !== false)
-      if (loadedDocument.resetView !== false) { selectionRef.current = []; setView(emptyGraphView()) }
+      restoreGraphCanvas(cy, document, isNewDocument)
+      if (isNewDocument) {
+        selectionRef.current = []
+        setView(emptyGraphView())
+        setConnectMode(false)
+        setConnectSource(null)
+        setQuickSearchOpen(false)
+        setQuickSearchQuery('')
+        setQuickSearchIndex(0)
+        setDocumentSessionId(id => id + 1)
+      }
       cy.elements().unselect()
       selectionRef.current = selectionRef.current.filter(id => cy.getElementById(id).nonempty())
       selectionRef.current.forEach(id => cy.getElementById(id).select())
       setSelectedIds(selectionRef.current)
+      const level = cy.zoom()
+      if (typeof level === 'number' && Number.isFinite(level)) setZoomPercent(Math.round(level * 100))
       setGraphVersion(version => version + 1)
-      setStatus(
-        document.elements.length
-          ? `Opened ${document.title}`
-          : `${document.title} — paste data, import a file, or add a node to begin.`,
-      )
+      if (isNewDocument && !messageRef.current) {
+        setStatus(
+          document.elements.length
+            ? `Opened ${document.title}`
+            : `${document.title} — paste data, import a file, or add a node to begin.`,
+        )
+      }
     } finally {
       suppressDocumentChangeRef.current = false
     }
   }, [loadedDocument])
 
+  const primarySelectedId = selectedIds[0] ?? null
+  const primarySelectedDocElement = useMemo(
+    () => (primarySelectedId ? currentDocument.elements.find(el => el.data.id === primarySelectedId) ?? null : null),
+    [currentDocument.elements, primarySelectedId],
+  )
+  const primaryAuthoritativeLabel = primarySelectedDocElement ? String(primarySelectedDocElement.data.label ?? '') : ''
+
   useEffect(() => {
-    const selected = selectedIds[0]
-    if (!selected || !cyRef.current) {
-      setSelectedLabel('')
-      return
-    }
-    const element = cyRef.current.getElementById(selected)
-    setSelectedLabel(String(element.data('label') ?? ''))
-  }, [selectedIds])
+    setSelectedLabel(primaryAuthoritativeLabel)
+  }, [primarySelectedId, primaryAuthoritativeLabel])
 
   const graphContext = useCallback((): GraphContextSummary => {
-    const cy = getCy()
-    const nodes = cy.nodes().map(node => ({
-      data: { category: node.data('category'), cluster: node.data('cluster'), pinned: node.data('pinned'), synthetic: node.data('synthetic') }, position: { ...node.position() },
-      id: node.id(),
-      label: String(node.data('label') ?? node.id()),
-    }))
-    const edges = cy.edges().map(edge => ({
-      id: edge.id(),
-      source: String(edge.data('source') ?? ''),
-      target: String(edge.data('target') ?? ''),
-      label: edge.data('label') ? String(edge.data('label')) : null,
-    }))
+    const nodes = currentDocument.elements
+      .filter(element => !isEdge(element))
+      .map(node => ({
+        data: {
+          category: node.data.category,
+          cluster: node.data.cluster,
+          pinned: node.data.pinned,
+          synthetic: node.data.synthetic,
+        },
+        ...(node.position ? { position: { ...node.position } } : {}),
+        id: String(node.data.id ?? ''),
+        label: String(node.data.label ?? node.data.id ?? ''),
+      }))
+    const edges = currentDocument.elements
+      .filter(isEdge)
+      .map(edge => ({
+        id: String(edge.data.id ?? ''),
+        source: String(edge.data.source ?? ''),
+        target: String(edge.data.target ?? ''),
+        label: edge.data.label ? String(edge.data.label) : null,
+      }))
     return summarizeGraphContext({
       title: documentTitle,
       documentPath,
@@ -764,9 +969,7 @@ export function GraphWorkspace({
       selectedIds,
       style: styleState,
     })
-    // graphVersion tracks Cytoscape mutations the React state does not.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentPath, documentTitle, getCy, graphVersion, layout, selectedIds, styleState])
+  }, [currentDocument.elements, documentPath, documentTitle, layout, selectedIds, styleState])
 
   const addNode = useCallback(async ({ id, label }: { id?: string; label?: string }): Promise<string> => {
     const nodeId = id || `n${crypto.randomUUID()}`
@@ -798,37 +1001,16 @@ export function GraphWorkspace({
     return 'Updated graph style.'
   }, [onCommand])
 
-  const clearGraph = useCallback(
-    async ({ confirm }: { confirm?: boolean }): Promise<string> => {
-      const cy = getCy()
-      const count = cy.elements().length
-      if (!count) {
-        const message = 'The graph is already empty.'
-        setStatus(message)
-        return message
-      }
-      if (confirm !== true) {
-        throw new GraphToolError(
-          `The graph holds ${cy.nodes().length} node${cy.nodes().length === 1 ? '' : 's'} and ${cy.edges().length} edge${cy.edges().length === 1 ? '' : 's'}. Resend with confirm: true only when the user asked to start over; to delete one element use removeElement with its id.`,
-        )
-      }
-      onCommand([{ type: 'replace', elements: [] }])
-      const message = `Cleared the graph (${count} elements removed).`
-      return message
-    },
-    [getCy, onCommand],
-  )
-
   const exportGraph = useCallback(async ({ filename, format = 'png', options = DEFAULT_EXPORT_OPTIONS }: {
     filename?: string; format?: 'png' | 'svg' | 'json' | 'html'; options?: GraphExportOptions
   }): Promise<string> => {
-    const exportDocument = graphExportDocument(currentDocument, options.scope, visibleElements, getCy().nodes(':selected').map(node => node.id()))
+    const exportDocument = graphExportDocument(currentDocument, options.scope, visibleElements, selectedIds)
     if (!exportDocument.elements.length && options.scope && options.scope !== 'all') throw new Error('This export scope has no elements. Select nodes or reset the view.')
     const safeName = sanitizeFileName(filename || currentDocument.title, format)
     const path = graphAssetExportPath(documentPath, safeName, boot.prefs.workingDirectory)
     if (format === 'html') {
       const { graphHtml } = await import('../canvas/graphHtml')
-      await writeTextFile(path, graphHtml(exportDocument, options.html, getCy().nodes(':selected').map(node => node.id())))
+      await writeTextFile(path, graphHtml(exportDocument, options.html, selectedIds))
     }
     else if (format === 'json') await writeTextFile(path, serializeGraphDocument(exportDocument))
     else {
@@ -859,7 +1041,21 @@ export function GraphWorkspace({
     }
     setStatus(`Saved ${safeName}`)
     return `Saved graph to ${path}`
-  }, [currentDocument, documentPath, boot.prefs.workingDirectory, getCy, visibleElements])
+  }, [currentDocument, documentPath, boot.prefs.workingDirectory, selectedIds, visibleElements])
+
+  const exportGraphUi = useCallback(async (format: GraphUiExportFormat, options: GraphExportOptions): Promise<string> => {
+    if (format === 'csv-nodes' || format === 'csv-edges') {
+      const exportDocument = graphExportDocument(currentDocument, options.scope, visibleElements, selectedIds)
+      const suffix = format === 'csv-nodes' ? 'nodes' : 'edges'
+      const csv = format === 'csv-nodes' ? graphNodesCsv(exportDocument) : graphEdgesCsv(exportDocument)
+      const safeName = sanitizeFileName(`${currentDocument.title || 'graph'}_${suffix}`, 'csv')
+      const path = graphAssetExportPath(documentPath, safeName, boot.prefs.workingDirectory)
+      await writeTextFile(path, csv)
+      setStatus(`Saved ${safeName}`)
+      return `Saved ${suffix} CSV to ${path}`
+    }
+    return exportGraph({ format, options })
+  }, [boot.prefs.workingDirectory, currentDocument, documentPath, exportGraph, selectedIds, visibleElements])
 
   const readGraphFile = useCallback(async (path: string): Promise<string> => {
     return readTextFile(path)
@@ -869,6 +1065,98 @@ export function GraphWorkspace({
     const cy = getCy(); const ids = new Set(visibleElements.map(element => element.data.id)); const included = cy.elements().filter(element => ids.has(element.id())); if (included.length) cy.fit(included, 32)
     setStatus('Fit graph')
   }, [getCy, visibleElements])
+
+  const zoomBy = useCallback((factor: number) => {
+    const cy = cyRef.current
+    if (!cy) return
+    const current = cy.zoom()
+    if (typeof current !== 'number' || !Number.isFinite(current)) return
+    const next = Math.max(0.05, Math.min(8, current * factor))
+    const width = cy.width()
+    const height = cy.height()
+    if (typeof width === 'number' && typeof height === 'number' && Number.isFinite(width) && Number.isFinite(height)) {
+      cy.zoom({ level: next, renderedPosition: { x: width / 2, y: height / 2 } })
+    } else {
+      cy.zoom(next)
+    }
+  }, [])
+
+  const resetZoom = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    const width = cy.width()
+    const height = cy.height()
+    if (typeof width === 'number' && typeof height === 'number' && Number.isFinite(width) && Number.isFinite(height)) {
+      cy.zoom({ level: 1, renderedPosition: { x: width / 2, y: height / 2 } })
+    } else {
+      cy.zoom(1)
+    }
+  }, [])
+
+  const duplicateSelection = useCallback(() => {
+    const selectedSet = new Set(selectedIds)
+    const nodes = currentDocument.elements.filter(el => !isEdge(el) && selectedSet.has(el.data.id!))
+    if (!nodes.length) return
+    const usedIds = new Set(currentDocument.elements.map(el => el.data.id!))
+    const nextId = (base: string) => {
+      let candidate = `${base}-copy`, index = 2
+      while (usedIds.has(candidate)) candidate = `${base}-copy-${index++}`
+      usedIds.add(candidate)
+      return candidate
+    }
+    const idMap = new Map<string, string>()
+    const clones: GraphElement[] = []
+    for (const node of nodes) {
+      const oldId = node.data.id!
+      const newId = nextId(oldId)
+      idMap.set(oldId, newId)
+      clones.push({
+        group: 'nodes',
+        data: { ...structuredClone(node.data), id: newId, pinned: false },
+        position: node.position ? { x: node.position.x + 40, y: node.position.y + 40 } : undefined,
+      })
+    }
+    for (const edge of currentDocument.elements.filter(isEdge)) {
+      const newSource = idMap.get(edge.data.source!)
+      const newTarget = idMap.get(edge.data.target!)
+      if (!newSource || !newTarget) continue
+      const newEdgeId = nextId(edge.data.id!)
+      clones.push({
+        group: 'edges',
+        data: { ...structuredClone(edge.data), id: newEdgeId, source: newSource, target: newTarget },
+      })
+    }
+    onCommand([{ type: 'add', elements: clones }])
+    selectElements(clones.map(el => el.data.id!))
+    setStatus(`Duplicated ${nodes.length} node${nodes.length === 1 ? '' : 's'}`)
+  }, [currentDocument.elements, onCommand, selectElements, selectedIds])
+
+  const quickSearchMatches = useMemo(() => {
+    const q = quickSearchQuery.trim().toLowerCase()
+    if (!q) return []
+    return visibleElements.filter(el => {
+      if (isEdge(el)) return false
+      const text = `${el.data.id ?? ''} ${el.data.label ?? ''} ${el.data.category ?? ''}`.toLowerCase()
+      return text.includes(q)
+    })
+  }, [quickSearchQuery, visibleElements])
+
+  const jumpToSearchMatch = useCallback((index: number) => {
+    if (!quickSearchMatches.length) return
+    const wrapped = ((index % quickSearchMatches.length) + quickSearchMatches.length) % quickSearchMatches.length
+    setQuickSearchIndex(wrapped)
+    const match = quickSearchMatches[wrapped]!
+    const id = match.data.id!
+    selectElements([id])
+    const cy = cyRef.current
+    if (cy) {
+      const target = cy.getElementById(id)
+      if (target && !target.empty()) {
+        cy.center(target)
+      }
+    }
+  }, [quickSearchMatches, selectElements])
+
   // Going into the box, or growing to the full app, the graph is fitted to the room it now has.
   const fitRef = useRef(fit)
   fitRef.current = fit
@@ -889,6 +1177,9 @@ export function GraphWorkspace({
 
   const loadSampleById = useCallback(
     async (sampleId: string): Promise<string> => {
+      if (!SAMPLE_GRAPHS.length) {
+        throw new GraphToolError('No built-in samples are bundled. Use createGraph or loadGraph with data instead.')
+      }
       const sample = SAMPLE_GRAPHS.find(item => item.id === sampleId)
       if (!sample) {
         throw new GraphToolError(
@@ -927,8 +1218,8 @@ export function GraphWorkspace({
       applyGraphPalette: () => onPropose('Apply measured category palette', graphPalettePlan(currentDocument).commands),
       createGraph: async document => { const base = currentDocument; const next = document.elements.length ? await prepareLayout(document, document.layout) : document; if (liveDocument.current !== base) throw new Error('The open graph changed while preparing the new graph. Try again.'); await onCreateGraph(next); return JSON.stringify({ status: 'created', title: document.title, message: 'Opened as a separate graph; the previous document is preserved. Autosave is scheduled. Verify with getGraphContext and saveGraph.' }) },
       proposeGraph: prepareProposal,
-      addEdge: async input => onPropose('Add an edge', [{ type: 'add', elements: [{ data: { ...input, id: input.id || `e${crypto.randomUUID()}` } }] }]),
-      addNode: async input => onPropose('Add a node', [{ type: 'add', elements: [{ data: { ...input, id: input.id || `n${crypto.randomUUID()}` } }] }]),
+      addEdge: async input => onPropose('Add an edge', [{ type: 'add', elements: [{ group: 'edges', data: { ...input, id: input.id || `e${crypto.randomUUID()}`, label: input.label ?? '' } }] }]),
+      addNode: async input => { const id = input.id || `n${crypto.randomUUID()}`; return onPropose('Add a node', [{ type: 'add', elements: [{ group: 'nodes', data: { ...input, id, label: input.label ?? id } }] }]) },
       saveGraph,
       exportGraph,
       fit,
@@ -951,60 +1242,161 @@ export function GraphWorkspace({
   }, [
     view, saveView, openView, changeExploreView, selectElements, prepareLayout, prepareProposal,
     onCreateGraph, onPropose, onApplyProposal, onDiscardProposal, proposal, currentDocument,
-    addEdge,
-    addNode,
-    applyGraphElements,
     cyReady,
-    clearGraph,
     saveGraph,
     exportGraph,
     fit,
     graphContext,
     loadSampleById,
     readGraphFile,
-    removeElement,
-    runLayout,
-    setElementLabel,
-    setStyle,
   ])
 
   usePureGraphAgentTools(ready, agentContext)
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || !['z', 'y'].includes(event.key.toLowerCase())) return
+      if (event.defaultPrevented) return
       const target = event.target as HTMLElement | null
-      if (target?.closest('input, textarea, [contenteditable="true"]')) return
-      const redo = event.key.toLowerCase() === 'y' || event.shiftKey
-      if (redo ? !canRedo : !canUndo) return
-      event.preventDefault(); redo ? onRedo() : onUndo()
+      if (
+        target?.closest('dialog, [role="dialog"], [aria-modal="true"]') ||
+        document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')
+      ) {
+        return
+      }
+      const inEditable = !!(
+        target?.isContentEditable ||
+        target?.closest('input, textarea, select, [contenteditable="true"]')
+      )
+      const mod = event.metaKey || event.ctrlKey
+      const key = event.key.toLowerCase()
+
+      if (mod && !event.altKey && key === 'f') {
+        event.preventDefault()
+        setQuickSearchOpen(true)
+        requestAnimationFrame(() => quickSearchInputRef.current?.focus())
+        return
+      }
+      if (event.key === 'Escape') {
+        if (quickSearchOpen && (!inEditable || target === quickSearchInputRef.current)) {
+          event.preventDefault()
+          setQuickSearchOpen(false)
+          return
+        }
+        if (inEditable) return
+        if (connectMode) {
+          event.preventDefault()
+          setConnectMode(false)
+          setConnectSource(null)
+          setStatus('Exited connect mode')
+          return
+        }
+        if (selectedIds.length > 0) {
+          event.preventDefault()
+          selectElements([])
+          return
+        }
+      }
+      if (inEditable) return
+
+      if (mod && !event.altKey && ['z', 'y'].includes(key)) {
+        const redo = key === 'y' || event.shiftKey
+        if (redo ? !canRedo : !canUndo) return
+        event.preventDefault()
+        redo ? onRedo() : onUndo()
+        return
+      }
+      if (mod && !event.altKey && key === 'a') {
+        event.preventDefault()
+        selectElements(visibleElements.map(el => el.data.id!))
+        return
+      }
+      if (mod && !event.altKey && key === 'd') {
+        if (selectedIds.length > 0) {
+          event.preventDefault()
+          duplicateSelection()
+        }
+        return
+      }
+      if (!mod && !event.altKey && (event.key === 'Delete' || event.key === 'Backspace')) {
+        if (selectedIds.length > 0) {
+          event.preventDefault()
+          onCommand([{ type: 'remove', ids: selectedIds }])
+          selectElements([])
+          setStatus(`Removed ${selectedIds.length} element${selectedIds.length === 1 ? '' : 's'}`)
+        }
+        return
+      }
+      if (!mod && !event.altKey && (event.key === '+' || event.key === '=')) {
+        event.preventDefault()
+        zoomBy(1.25)
+        return
+      }
+      if (!mod && !event.altKey && event.key === '-') {
+        event.preventDefault()
+        zoomBy(0.8)
+        return
+      }
+      if (!mod && !event.altKey && event.key === '0') {
+        event.preventDefault()
+        fit()
+      }
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [canUndo, canRedo, onUndo, onRedo])
+  }, [
+    canUndo, canRedo, onUndo, onRedo,
+    quickSearchOpen, connectMode, selectedIds, selectElements,
+    visibleElements, duplicateSelection, onCommand, zoomBy, fit,
+  ])
 
+  const graphStats = useMemo(() => ({
+    edges: currentDocument.elements.filter(isEdge).length,
+    nodes: currentDocument.elements.filter(el => !isEdge(el)).length,
+    selected: selectedIds.length,
+  }), [currentDocument.elements, selectedIds.length])
 
-  const graphStats = useMemo(() => {
-    if (!cyRef.current) return { edges: 0, nodes: 0, selected: 0 }
-    return {
-      edges: cyRef.current.edges().length,
-      nodes: cyRef.current.nodes().length,
-      selected: selectedIds.length,
-    }
-  }, [cyReady, graphVersion, selectedIds.length])
+  const selectedNodeIds = useMemo(
+    () => selectedIds.filter(id => currentDocument.elements.some(el => el.data.id === id && !isEdge(el))),
+    [currentDocument.elements, selectedIds],
+  )
+  const selectedEdgeIds = useMemo(
+    () => selectedIds.filter(id => currentDocument.elements.some(el => el.data.id === id && isEdge(el))),
+    [currentDocument.elements, selectedIds],
+  )
 
   const selectedElement = useMemo(() => {
-    const id = selectedIds[0]
-    if (!id || !cyRef.current) return null
-    const element = cyRef.current.getElementById(id)
-    if (element.empty()) return null
+    if (!primarySelectedDocElement) return null
+    const edge = isEdge(primarySelectedDocElement)
     return {
-      id,
-      kind: element.isNode() ? 'node' : 'edge',
-      source: element.isEdge() ? String(element.data('source') ?? '') : null,
-      target: element.isEdge() ? String(element.data('target') ?? '') : null,
+      id: primarySelectedDocElement.data.id!,
+      kind: edge ? ('edge' as const) : ('node' as const),
+      source: edge ? String(primarySelectedDocElement.data.source ?? '') : null,
+      target: edge ? String(primarySelectedDocElement.data.target ?? '') : null,
+      data: primarySelectedDocElement.data,
     }
-  }, [graphVersion, selectedIds])
+  }, [primarySelectedDocElement])
+
+  const runAlign = useCallback((mode: GraphAlignMode) => {
+    try {
+      const positions = alignNodePositions(currentDocument.elements, selectedNodeIds, mode)
+      onCommand([{ type: 'positions', positions }])
+      setStatus(`Aligned ${Object.keys(positions).length} nodes (${mode})`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }, [currentDocument.elements, onCommand, selectedNodeIds])
+
+  const runDistribute = useCallback((axis: GraphDistributeAxis) => {
+    try {
+      const positions = distributeNodePositions(currentDocument.elements, selectedNodeIds, axis)
+      onCommand([{ type: 'positions', positions }])
+      setStatus(`Distributed ${Object.keys(positions).length} nodes (${axis})`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    }
+  }, [currentDocument.elements, onCommand, selectedNodeIds])
+
+  const stableDocumentKey = `session-${documentSessionId}`
 
   const createNodeFromDraft = useCallback(() => {
     addNode({
@@ -1051,6 +1443,22 @@ export function GraphWorkspace({
         <Actions>
           {saveStatus === 'Not saved' && <GhostButton onClick={onRetrySave}>Retry save</GhostButton>}
           {layoutBusy && <GhostButton onClick={() => layoutAbort.current?.abort()}>Cancel layout</GhostButton>}
+          <GhostButton
+            type="button"
+            disabled={!cyReady}
+            aria-pressed={connectMode}
+            title="Click a source node, then a target node to add an edge (Esc to exit)"
+            onClick={() => {
+              setConnectMode(active => {
+                const next = !active
+                setConnectSource(null)
+                setStatus(next ? 'Connect mode: click a source node (Esc to exit)' : 'Exited connect mode')
+                return next
+              })
+            }}
+          >
+            Connect
+          </GhostButton>
           <GhostButton disabled={!canUndo} onClick={onUndo}>Undo</GhostButton>
           <GhostButton disabled={!canRedo} onClick={onRedo}>Redo</GhostButton>
           <GhostButton type="button" disabled={!cyReady} onClick={fit}>
@@ -1084,8 +1492,8 @@ export function GraphWorkspace({
             </StatGrid>
           </Section>
 
-          <div hidden={activePanel !== 'Data'}><GraphData elements={currentDocument.elements} documentKey={documentPath ?? documentTitle} onCommand={onCommand} selected={selectedIds} onSelect={selectElements} /></div>
-          <div hidden={activePanel !== 'Explore'}><GraphExplore key={documentPath ?? documentTitle} document={currentDocument} selectedIds={selectedIds} view={view} onView={changeExploreView} onSelect={selectElements} onCommand={onCommand} onFit={fit} onSaveView={saveView} onOpenView={openView} /></div>
+          <div hidden={activePanel !== 'Data'}><GraphData elements={currentDocument.elements} documentKey={stableDocumentKey} onCommand={onCommand} selected={selectedIds} onSelect={selectElements} /></div>
+          <div hidden={activePanel !== 'Explore'}><GraphExplore key={stableDocumentKey} document={currentDocument} selectedIds={selectedIds} view={view} onView={changeExploreView} onSelect={selectElements} onCommand={onCommand} onFit={fit} onSaveView={saveView} onOpenView={openView} /></div>
           <Section hidden={activePanel !== 'Graph' || SAMPLE_GRAPHS.length === 0}>
             {SAMPLE_GRAPHS.length > 0 && <Details><Summary>Start from a sample</Summary>
               {SAMPLE_GRAPHS.map(sample => <GhostButton key={sample.id} onClick={() => { void loadSample(sample).catch(error => setStatus(String(error))) }}>{sample.name}</GhostButton>)}
@@ -1093,7 +1501,7 @@ export function GraphWorkspace({
           </Section>
 
           <Section hidden={activePanel !== 'Graph'}>
-            <Details>
+            <Details ref={createDetailsRef}>
               <Summary>Create nodes and edges</Summary>
               <TwoCol>
                 <Label htmlFor="node-id">
@@ -1127,7 +1535,7 @@ export function GraphWorkspace({
               <TwoCol>
                 <GraphNodePicker label="Source" value={draftEdgeSource} onChange={setDraftEdgeSource} elements={currentDocument.elements} />
                 <GraphNodePicker label="Target" value={draftEdgeTarget} onChange={setDraftEdgeTarget} elements={currentDocument.elements} />
-                <GhostButton disabled={selectedIds.filter(id => currentDocument.elements.some(element => element.data.id === id && !element.data.source)).length !== 2} onClick={() => { const ids = selectedIds.filter(id => currentDocument.elements.some(element => element.data.id === id && !element.data.source)); setDraftEdgeSource(ids[0]); setDraftEdgeTarget(ids[1]) }}>Connect selected nodes</GhostButton>
+                <GhostButton disabled={selectedNodeIds.length !== 2} onClick={() => { setDraftEdgeSource(selectedNodeIds[0]!); setDraftEdgeTarget(selectedNodeIds[1]!) }}>Connect selected nodes</GhostButton>
               </TwoCol>
               <Label htmlFor="edge-label">
                 Edge label
@@ -1161,11 +1569,35 @@ export function GraphWorkspace({
               <GhostButton aria-pressed={layoutDirection === 'right'} onClick={() => setLayoutDirection('right')}>Left to right</GhostButton>
             </ButtonRow>
             <ButtonRow>
-              <GhostButton disabled={!selectedIds.length} onClick={() => onCommand([{ type: 'pin', ids: selectedIds, pinned: true }])}>Pin selected</GhostButton>
-              <GhostButton disabled={!selectedIds.length} onClick={() => onCommand([{ type: 'pin', ids: selectedIds, pinned: false }])}>Unpin selected</GhostButton>
+              <GhostButton disabled={!selectedNodeIds.length} onClick={() => onCommand([{ type: 'pin', ids: selectedNodeIds, pinned: true }])}>Pin selected</GhostButton>
+              <GhostButton disabled={!selectedNodeIds.length} onClick={() => onCommand([{ type: 'pin', ids: selectedNodeIds, pinned: false }])}>Unpin selected</GhostButton>
             </ButtonRow>
             <Label htmlFor="layout-select">Layout</Label>
             <SelectField id="layout-select" aria-label="layout-select" value={layout} options={SUPPORTED_LAYOUTS.map(value => ({ value, label: value }))} onValueChange={value => { void runLayout(value as GraphLayoutName).catch(error => setStatus(String(error))) }} />
+            <Button
+              type="button"
+              disabled={!cyReady || layoutBusy || (layoutScope === 'selected' ? selectedNodeIds.length === 0 : graphStats.nodes === 0)}
+              onClick={() => { void runLayout(layout).then(msg => setStatus(msg)).catch(error => setStatus(error instanceof Error ? error.message : String(error))) }}
+            >
+              Apply layout
+            </Button>
+            {selectedNodeIds.length >= 2 && (
+              <Details open>
+                <Summary>Align &amp; distribute ({selectedNodeIds.length} nodes)</Summary>
+                <ThreeCol>
+                  <GhostButton type="button" onClick={() => runAlign('left')}>Left</GhostButton>
+                  <GhostButton type="button" onClick={() => runAlign('center')}>Center</GhostButton>
+                  <GhostButton type="button" onClick={() => runAlign('right')}>Right</GhostButton>
+                  <GhostButton type="button" onClick={() => runAlign('top')}>Top</GhostButton>
+                  <GhostButton type="button" onClick={() => runAlign('middle')}>Middle</GhostButton>
+                  <GhostButton type="button" onClick={() => runAlign('bottom')}>Bottom</GhostButton>
+                </ThreeCol>
+                <ButtonRow>
+                  <GhostButton type="button" disabled={selectedNodeIds.length < 3} onClick={() => runDistribute('horizontal')}>Distribute H</GhostButton>
+                  <GhostButton type="button" disabled={selectedNodeIds.length < 3} onClick={() => runDistribute('vertical')}>Distribute V</GhostButton>
+                </ButtonRow>
+              </Details>
+            )}
           </Section>
 
           {activePanel === 'Style' && <GraphEncodings document={currentDocument} onCommand={onCommand} />}
@@ -1179,7 +1611,7 @@ export function GraphWorkspace({
                   <ColorInput
                     id="node-color"
                     type="color"
-                    value={nodeColor}
+                    value={toColorPickerHex(nodeColor, DEFAULT_GRAPH_STYLE.nodeColor)}
                     onChange={event => {
                       void setStyle({ nodeColor: event.target.value })
                     }}
@@ -1190,7 +1622,7 @@ export function GraphWorkspace({
                   <ColorInput
                     id="edge-color"
                     type="color"
-                    value={edgeColor}
+                    value={toColorPickerHex(edgeColor, DEFAULT_GRAPH_STYLE.edgeColor)}
                     onChange={event => {
                       void setStyle({ edgeColor: event.target.value })
                     }}
@@ -1203,7 +1635,7 @@ export function GraphWorkspace({
                   <ColorInput
                     id="background-color"
                     type="color"
-                    value={backgroundColor}
+                    value={toColorPickerHex(backgroundColor, DEFAULT_GRAPH_STYLE.backgroundColor)}
                     onChange={event => {
                       void setStyle({ backgroundColor: event.target.value })
                     }}
@@ -1297,7 +1729,87 @@ export function GraphWorkspace({
 
           <Section hidden={activePanel !== 'Graph'}>
             <SectionTitle>Selection</SectionTitle>
-            {selectedElement ? (
+            {selectedIds.length > 1 ? (
+              <Inspector>
+                <InspectorMeta>
+                  {selectedIds.length} selected ({selectedNodeIds.length} node{selectedNodeIds.length === 1 ? '' : 's'} · {selectedEdgeIds.length} edge{selectedEdgeIds.length === 1 ? '' : 's'})
+                </InspectorMeta>
+                {selectedNodeIds.length === 2 && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      addEdge({ source: selectedNodeIds[0]!, target: selectedNodeIds[1]! })
+                        .then(msg => setStatus(msg))
+                        .catch(error => setStatus(error instanceof Error ? error.message : String(error)))
+                    }}
+                  >
+                    Connect 2 selected nodes
+                  </Button>
+                )}
+                {selectedNodeIds.length > 0 && (
+                  <ButtonRow>
+                    <GhostButton type="button" onClick={() => onCommand([{ type: 'pin', ids: selectedNodeIds, pinned: true }])}>
+                      Pin ({selectedNodeIds.length})
+                    </GhostButton>
+                    <GhostButton type="button" onClick={() => onCommand([{ type: 'pin', ids: selectedNodeIds, pinned: false }])}>
+                      Unpin ({selectedNodeIds.length})
+                    </GhostButton>
+                  </ButtonRow>
+                )}
+                <ColorRow>
+                  <Label htmlFor="bulk-color">
+                    Bulk color
+                    <ColorInput
+                      id="bulk-color"
+                      type="color"
+                      value={bulkColor}
+                      onChange={event => setBulkColor(event.target.value)}
+                    />
+                  </Label>
+                  <div style={{ display: 'grid', alignContent: 'end' }}>
+                    <GhostButton type="button" onClick={() => onCommand([{ type: 'update', ids: selectedIds, data: { color: bulkColor } }])}>
+                      Apply color
+                    </GhostButton>
+                  </div>
+                </ColorRow>
+                {selectedNodeIds.length > 0 && (
+                  <TwoCol>
+                    <Input
+                      aria-label="Bulk category"
+                      value={bulkCategory}
+                      placeholder="Category"
+                      onChange={event => setBulkCategory(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          onCommand([{ type: 'update', ids: selectedNodeIds, data: { category: bulkCategory.trim() || undefined } }])
+                        }
+                      }}
+                    />
+                    <GhostButton
+                      type="button"
+                      onClick={() => onCommand([{ type: 'update', ids: selectedNodeIds, data: { category: bulkCategory.trim() || undefined } }])}
+                    >
+                      Set category
+                    </GhostButton>
+                  </TwoCol>
+                )}
+                <ButtonRow>
+                  <GhostButton type="button" onClick={duplicateSelection} disabled={selectedNodeIds.length === 0}>
+                    Duplicate
+                  </GhostButton>
+                  <GhostButton
+                    type="button"
+                    onClick={() => {
+                      onCommand([{ type: 'remove', ids: selectedIds }])
+                      selectElements([])
+                    }}
+                  >
+                    Delete ({selectedIds.length})
+                  </GhostButton>
+                </ButtonRow>
+              </Inspector>
+            ) : selectedElement ? (
               <Inspector>
                 <InspectorMeta>
                   {selectedElement.kind} · {selectedElement.id}
@@ -1313,8 +1825,111 @@ export function GraphWorkspace({
                     id="selected-label"
                     value={selectedLabel}
                     onChange={event => setSelectedLabel(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        setElementLabel(selectedElement.id, selectedLabel).catch(error =>
+                          setStatus(error instanceof Error ? error.message : String(error)),
+                        )
+                      }
+                    }}
                   />
                 </Label>
+                {selectedElement.kind === 'node' ? (
+                  <>
+                    <ColorRow>
+                      <Label htmlFor="selected-node-color">
+                        Node color
+                        <ColorInput
+                          id="selected-node-color"
+                          type="color"
+                          value={toColorPickerHex(selectedElement.data.color, nodeColor)}
+                          onChange={event => onCommand([{ type: 'update', ids: [selectedElement.id], data: { color: event.target.value } }])}
+                        />
+                      </Label>
+                      <Label htmlFor="selected-node-shape">
+                        Node shape
+                        <SelectField
+                          id="selected-node-shape"
+                          aria-label="Selected node shape"
+                          value={typeof selectedElement.data.shape === 'string' ? selectedElement.data.shape : ''}
+                          options={[{ value: '', label: 'Default' }, ...SUPPORTED_NODE_SHAPES.map(value => ({ value, label: value }))]}
+                          onValueChange={value => onCommand([{ type: 'update', ids: [selectedElement.id], data: { shape: value || undefined } }])}
+                        />
+                      </Label>
+                    </ColorRow>
+                    <Label htmlFor="selected-node-size">
+                      Node size {typeof selectedElement.data.size === 'number' ? selectedElement.data.size : `default (${nodeSize})`}
+                      <RangeInput
+                        id="selected-node-size"
+                        type="range"
+                        min="4"
+                        max="96"
+                        value={typeof selectedElement.data.size === 'number' ? selectedElement.data.size : nodeSize}
+                        onChange={event => onCommand([{ type: 'update', ids: [selectedElement.id], data: { size: Number(event.target.value) } }])}
+                      />
+                    </Label>
+                    <ButtonRow>
+                      <GhostButton
+                        type="button"
+                        onClick={() => onCommand([{ type: 'pin', ids: [selectedElement.id], pinned: !selectedElement.data.pinned }])}
+                      >
+                        {selectedElement.data.pinned ? 'Unpin' : 'Pin'}
+                      </GhostButton>
+                      <GhostButton
+                        type="button"
+                        onClick={() => onCommand([{ type: 'update', ids: [selectedElement.id], data: { color: undefined, shape: undefined, size: undefined, borderWidth: undefined } }])}
+                      >
+                        Reset style
+                      </GhostButton>
+                    </ButtonRow>
+                  </>
+                ) : (
+                  <>
+                    <ColorRow>
+                      <Label htmlFor="selected-edge-color">
+                        Edge color
+                        <ColorInput
+                          id="selected-edge-color"
+                          type="color"
+                          value={toColorPickerHex(selectedElement.data.color, edgeColor)}
+                          onChange={event => onCommand([{ type: 'update', ids: [selectedElement.id], data: { color: event.target.value } }])}
+                        />
+                      </Label>
+                      <div style={{ display: 'grid', alignContent: 'end' }}>
+                        <GhostButton
+                          type="button"
+                          onClick={() => onCommand([{ type: 'update', ids: [selectedElement.id], data: { color: undefined, width: undefined } }])}
+                        >
+                          Reset style
+                        </GhostButton>
+                      </div>
+                    </ColorRow>
+                    <Label htmlFor="selected-edge-width">
+                      Edge width {typeof selectedElement.data.width === 'number' ? selectedElement.data.width : `default (${edgeWidth})`}
+                      <RangeInput
+                        id="selected-edge-width"
+                        type="range"
+                        min="0.25"
+                        max="10"
+                        step="0.25"
+                        value={typeof selectedElement.data.width === 'number' ? selectedElement.data.width : edgeWidth}
+                        onChange={event => onCommand([{ type: 'update', ids: [selectedElement.id], data: { width: Number(event.target.value) } }])}
+                      />
+                    </Label>
+                    <GhostButton
+                      type="button"
+                      disabled={!selectedElement.source || !selectedElement.target || selectedElement.source === selectedElement.target}
+                      onClick={() => {
+                        if (!selectedElement.source || !selectedElement.target) return
+                        onCommand([{ type: 'update', ids: [selectedElement.id], data: { source: selectedElement.target, target: selectedElement.source } }])
+                        setStatus(`Reversed edge ${selectedElement.id}`)
+                      }}
+                    >
+                      Reverse edge direction
+                    </GhostButton>
+                  </>
+                )}
                 <ButtonRow>
                   <GhostButton
                     type="button"
@@ -1346,15 +1961,56 @@ export function GraphWorkspace({
                 </ButtonRow>
               </Inspector>
             ) : (
-              <InspectorMeta>Select a node or edge on the canvas.</InspectorMeta>
+              <InspectorMeta>Select a node or edge on the canvas. Double-click canvas to add a node.</InspectorMeta>
             )}
           </Section>
 
-          {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={(format, options) => exportGraph({ format, options })} />}
-          {activePanel === 'Review' && <GraphReview document={currentDocument} elements={cyRef.current ? fromCyElements(cyRef.current) : []} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}          <PaneWidth {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></PaneWidth>
+          {activePanel === 'Export' && <GraphExport options={exportOptions} setOptions={setExportOptions} document={currentDocument} visibleElements={visibleElements} selectedIds={selectedIds} onExport={exportGraphUi} />}
+          {activePanel === 'Review' && <GraphReview document={currentDocument} elements={currentDocument.elements} directed={directed} selectedIds={selectedIds} onSelect={selectElements} />}
+          <PaneWidth {...compactPart(compact, 'hide')}>Pane width<input aria-label="Pane width" type="range" min={300} max={680} value={panelWidth} onChange={event => setPanelWidth(Number(event.target.value))} /></PaneWidth>
         </Panel>
-        <GraphHost style={{ background: drawnBackground }} {...compactPart(compact, 'host')}>
+        <GraphHost style={{ backgroundColor: safeColorString(drawnBackground, DEFAULT_GRAPH_STYLE.backgroundColor) }} {...compactPart(compact, 'host')}>
           <GraphCanvas ref={containerRef} {...agentRefs(['@open', documentPath, documentPath && `path:${documentPath}`], documentTitle)} />
+          {quickSearchOpen && (
+            <CanvasFloatingBar role="search" aria-label="Quick node search">
+              <input
+                ref={quickSearchInputRef}
+                type="search"
+                aria-label="Find node on canvas"
+                placeholder="Find node…"
+                value={quickSearchQuery}
+                onChange={event => {
+                  setQuickSearchQuery(event.target.value)
+                  setQuickSearchIndex(0)
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    jumpToSearchMatch(event.shiftKey ? quickSearchIndex - 1 : quickSearchIndex + (quickSearchMatches.length > 1 && selectedIds[0] === quickSearchMatches[quickSearchIndex]?.data.id ? 1 : 0))
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setQuickSearchOpen(false)
+                  }
+                }}
+              />
+              <span>
+                {quickSearchQuery.trim()
+                  ? quickSearchMatches.length
+                    ? `${(quickSearchIndex % quickSearchMatches.length) + 1}/${quickSearchMatches.length}`
+                    : '0'
+                  : ''}
+              </span>
+              <button type="button" disabled={!quickSearchMatches.length} onClick={() => jumpToSearchMatch(quickSearchIndex - 1)}>Prev</button>
+              <button type="button" disabled={!quickSearchMatches.length} onClick={() => jumpToSearchMatch(quickSearchIndex + 1)}>Next</button>
+              <button type="button" aria-label="Close search" onClick={() => setQuickSearchOpen(false)}>×</button>
+            </CanvasFloatingBar>
+          )}
+          {!quickSearchOpen && connectMode && (
+            <CanvasFloatingBar role="status">
+              <span>{connectSource ? `Connect from ${connectSource}: click target node` : 'Connect mode: click source node'}</span>
+              <button type="button" onClick={() => { setConnectMode(false); setConnectSource(null); setStatus('Exited connect mode') }}>Done</button>
+            </CanvasFloatingBar>
+          )}
           {currentDocument.elements.length > 0 && <CrossAppDragHandle label="graph"
             style={{position:'absolute',top:12,right:12,zIndex:2}}
             disabled={dragSnapshot?.request !== dragRequest} onError={setStatus}
@@ -1363,14 +2019,22 @@ export function GraphWorkspace({
               return {name:`${currentDocument.title || 'graph'}.svg`,alt:currentDocument.title || 'Graph',dataUrl:dragSnapshot.dataUrl}
             }} />}
 
-          {styleState.showLegend && <div aria-label="Graph legend" style={{ position: 'absolute', bottom: 16, left: 16, maxHeight: '30%', overflow: 'auto', background: drawnBackground, color: readableTextColor(drawnBackground), padding: 12, borderRadius: 8 }}>
-            {graphLegend(currentDocument).map(entry => <div key={entry.label + entry.color} {...categoryRefs(entry.label)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ background: entry.color, width: 12, height: 12, display: 'inline-block', borderRadius: 3 }} />{entry.label}</div>)}
+          {styleState.showLegend && <div aria-label="Graph legend" style={{ position: 'absolute', bottom: 16, left: 16, maxHeight: '30%', overflow: 'auto', backgroundColor: safeColorString(drawnBackground, DEFAULT_GRAPH_STYLE.backgroundColor), color: readableTextColor(drawnBackground), padding: 12, borderRadius: 8 }}>
+            {graphLegend(currentDocument).map(entry => <div key={entry.label + entry.color} {...categoryRefs(entry.label)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ backgroundColor: safeColorString(entry.color, drawnStyle.nodeColor), width: 12, height: 12, display: 'inline-block', borderRadius: 3 }} />{entry.label}</div>)}
           </div>}
+          {cyReady && (
+            <ZoomControls aria-label="Canvas zoom controls">
+              <button type="button" aria-label="Zoom out" title="Zoom out (-)" onClick={() => zoomBy(0.8)}>−</button>
+              <button type="button" aria-label="Reset zoom to 100%" title="Reset zoom to 100%" onClick={resetZoom}>{zoomPercent}%</button>
+              <button type="button" aria-label="Zoom in" title="Zoom in (+)" onClick={() => zoomBy(1.25)}>+</button>
+              <button type="button" aria-label="Fit graph" title="Fit graph (0)" onClick={fit}>Fit</button>
+            </ZoomControls>
+          )}
           {!cyReady ? (
             <EmptyOverlay>Loading graph</EmptyOverlay>
           ) : graphStats.nodes === 0 ? (
             <EmptyOverlay>
-              Create a relationship map.<br /><GhostButton onClick={() => showPanel('Data')}>Import data</GhostButton> <GhostButton onClick={() => { showPanel('Graph'); document.querySelectorAll('details').forEach(item => { if (item.textContent?.includes('Create nodes and edges')) item.open = true }) }}>Add a node</GhostButton>
+              Create a relationship map.<br /><GhostButton onClick={() => showPanel('Data')}>Import data</GhostButton> <GhostButton onClick={() => { showPanel('Graph'); if (createDetailsRef.current) createDetailsRef.current.open = true }}>Add a node</GhostButton>
             </EmptyOverlay>
           ) : null}
         </GraphHost>

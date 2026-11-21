@@ -46,15 +46,39 @@ export function graphTitleFromPath(path: string): string {
   return name.replace(/\.[^.]+$/g, '') || DEFAULT_GRAPH_EXPORT_NAME
 }
 
+export function sanitizeFileName(raw: string, extension: string): string {
+  const safe = (raw || DEFAULT_GRAPH_EXPORT_NAME)
+    .trim()
+    // An export name carrying the other format's extension ("graph.png" asked
+    // for as JSON) must not become "graph.png.json".
+    .replace(/\.(png|svg|json|html|csv)$/i, '')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .replace(/^[._]+|[._]+$/g, '')
+  const base = safe || DEFAULT_GRAPH_EXPORT_NAME
+  return `${base}.${extension}`
+}
+
 export function graphAssetExportPath(
   packagePath: string | null,
   filename: string,
   fallbackDirectory: string | undefined,
 ): string {
+  const cleanName = filename.trim()
+  if (
+    !cleanName ||
+    /[\0\r\n]/.test(filename) ||
+    cleanName.includes('/') ||
+    cleanName.includes('\\') ||
+    cleanName.includes('..') ||
+    cleanName.startsWith('.')
+  ) {
+    throw new Error('Invalid export filename.')
+  }
   if (packagePath && isGraphPackagePath(packagePath)) {
-    return `${trimTrailingSlash(packagePath)}/${GRAPH_ASSET_FIGURES_DIR}/${filename}`
+    return `${trimTrailingSlash(packagePath)}/${GRAPH_ASSET_FIGURES_DIR}/${cleanName}`
   }
   const directory = fallbackDirectory?.trim()
   if (!directory) throw new Error('Choose a PureDesktop working directory before exporting.')
-  return `${trimTrailingSlash(directory)}/${filename}`
+  return `${trimTrailingSlash(directory)}/${cleanName}`
 }

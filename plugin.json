@@ -143,10 +143,24 @@
                         "positions",
                         "style",
                         "title",
-                        "layout"
+                        "layout",
+                        "encodings",
+                        "views"
                       ]
                     },
                     "elements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "encodings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "views": {
                       "type": "array",
                       "items": {
                         "type": "object"
@@ -249,7 +263,7 @@
         {
           "name": "loadGraph",
           "risk": "destructive",
-          "description": "Prepares a proposal for user review; it does not immediately apply changes. Prefer proposeGraph for multiple related edits. Replace the graph from a JSON or CSV/TSV edge-list string, or open a built-in sample as a new graph document. When the canvas already holds nodes, data loads need replace: true; use addNode/addEdge to grow an existing graph instead.",
+          "description": "Prepares a proposal for user review; it does not immediately apply changes. Prefer proposeGraph for multiple related edits. Replace the graph from a JSON or CSV/TSV edge-list string. When the canvas already holds nodes, data loads need replace: true; use addNode/addEdge to grow an existing graph instead.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -257,27 +271,14 @@
                 "type": "string",
                 "description": "Graph data: JSON (an element array, { elements }, or { nodes, edges }) or a CSV/TSV edge list with source/target (or from/to) columns and an optional label column."
               },
-              "sample": {
-                "type": "string",
-                "description": "Instead of data: a built-in sample id (urban-systems, pathway-atlas, dense-modules, mirna-radial, interaction-chord, red-clique, protein-hairball, module-constellation, matrix-lattice, volcano-cloud). Opens as its own new graph document; the open graph is kept.",
-                "enum": [
-                  "urban-systems",
-                  "pathway-atlas",
-                  "dense-modules",
-                  "mirna-radial",
-                  "interaction-chord",
-                  "red-clique",
-                  "protein-hairball",
-                  "module-constellation",
-                  "matrix-lattice",
-                  "volcano-cloud"
-                ]
-              },
               "replace": {
                 "type": "boolean",
                 "description": "Required (true) to replace a graph that already has nodes. Say what is being replaced in your reply."
               }
-            }
+            },
+            "required": [
+              "data"
+            ]
           },
           "requiresApproval": false
         },
@@ -399,7 +400,7 @@
         },
         {
           "name": "runLayout",
-          "description": "Prepares a proposal for user review; it does not immediately apply changes. Prefer proposeGraph for multiple related edits. Arrange the whole graph with a layout: cose (force-directed webs), breadthfirst (hierarchies), grid, circle, or concentric.",
+          "description": "Prepares a proposal for user review; it does not immediately apply changes. Prefer proposeGraph for multiple related edits. Arrange the whole graph with a layout: cose (force-directed webs), breadthfirst (hierarchies), grid, circle, concentric, or preset (keep supplied positions).",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -410,7 +411,8 @@
                   "grid",
                   "circle",
                   "concentric",
-                  "breadthfirst"
+                  "breadthfirst",
+                  "preset"
                 ]
               }
             },

@@ -24,6 +24,27 @@ export type GraphCommand =
   | { type: 'style'; style: Partial<GraphStyleState> }
   | { type: 'title'; title: string }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeAddedElements(elements: GraphElement[]): GraphElement[] {
+  return structuredClone(elements).map(element => {
+    if (
+      element &&
+      typeof element === 'object' &&
+      element.data &&
+      typeof element.data === 'object' &&
+      !isEdge(element) &&
+      element.data.label === undefined &&
+      typeof element.data.id === 'string'
+    ) {
+      return { ...element, data: { ...element.data, label: element.data.id } }
+    }
+    return element
+  })
+}
+
 /** A whole transaction either validates and returns once, or throws without changing its input. */
 export function applyGraphCommands(document: GraphDocument, commands: GraphCommand[]): GraphDocument {
   let next = structuredClone(document)
@@ -35,25 +56,34 @@ export function applyGraphCommands(document: GraphDocument, commands: GraphComma
     if (command.type === 'title' && typeof command.title !== 'string') throw new Error('Title must be text.')
     if (command.type === 'rename' && (typeof command.id !== 'string' || typeof command.nextId !== 'string')) throw new Error('Rename requires the old and new IDs.')
     if (command.type === 'layout' && (!SUPPORTED_LAYOUTS.includes(command.name) || (command.direction !== undefined && !['down', 'right'].includes(command.direction)))) throw new Error('Invalid layout or direction.')
-    if (command.type === 'update' && (!command.data || typeof command.data !== 'object' || Array.isArray(command.data))) throw new Error('Update requires a data object.')
+    if (command.type === 'update' && !isPlainObject(command.data)) throw new Error('Update requires a data object.')
+    if (command.type === 'style' && !isPlainObject(command.style)) throw new Error('Style must be an object.')
+    if (command.type === 'positions' && !isPlainObject(command.positions)) throw new Error('Positions must be an object.')
     if ((command.type === 'add' || command.type === 'replace') && !Array.isArray(command.elements)) throw new Error('Elements must be an array.')
+    if ('ids' in command && command.ids) {
+      for (const id of command.ids) if (!next.elements.some(element => element.data.id === id)) throw new Error(`No element "${id}".`)
+    }
     if (command.type === 'encodings') next.encodings = normalizeEncodings(command.encodings)
     if (command.type === 'views') next.views = normalizeSavedViews(command.views)
     if (command.type === 'document') next = parseGraphDocument(JSON.stringify(command.document))
     if (command.type === 'layout') { validateElements(next.elements); next = layoutGraph(next, command.name, command.ids, command.direction) }
-    if (command.type === 'add') next.elements.push(...structuredClone(command.elements))
-    if (command.type === 'replace') next.elements = structuredClone(command.elements)
+    if (command.type === 'add') next.elements.push(...normalizeAddedElements(command.elements))
+    if (command.type === 'replace') next.elements = normalizeAddedElements(command.elements)
     if (command.type === 'title') {
       if (!command.title.trim()) throw new Error('A graph needs a title.')
       next.title = command.title.trim()
     }
     if (command.type === 'style') next.style = normalizeGraphStyle({ ...next.style, ...Object.fromEntries(Object.entries(command.style).filter(([, value]) => value !== undefined)) })
-    if ('ids' in command && command.ids) {
-      for (const id of command.ids) if (!next.elements.some(element => element.data.id === id)) throw new Error(`No element "${id}".`)
-    }
     if (command.type === 'update') {
       if ('id' in command.data) throw new Error('Use rename to change an ID and update its connected edges.')
-      next.elements = next.elements.map(element => command.ids.includes(element.data.id!) ? { ...element, data: { ...element.data, ...command.data } } : element)
+      next.elements = next.elements.map(element => {
+        if (!command.ids.includes(element.data.id!)) return element
+        const data: Record<string, unknown> = { ...element.data, ...command.data }
+        for (const [key, value] of Object.entries(data)) {
+          if (value === undefined) delete data[key]
+        }
+        return { ...element, data: data as GraphElementData }
+      })
     }
     if (command.type === 'rename') {
       if (!next.elements.some(element => element.data.id === command.id)) throw new Error(`No element "${command.id}".`)
@@ -69,7 +99,23 @@ export function applyGraphCommands(document: GraphDocument, commands: GraphComma
     }
     if (command.type === 'remove') {
       const ids = new Set(command.ids)
-      next.elements = next.elements.filter(element => !ids.has(element.data.id!) && !ids.has(element.data.source!) && !ids.has(element.data.target!))
+      const removed = new Set(
+        next.elements
+          .filter(element => ids.has(element.data.id!) || ids.has(element.data.source!) || ids.has(element.data.target!))
+          .map(element => element.data.id!),
+      )
+      next.elements = next.elements.filter(element => !removed.has(element.data.id!))
+      if (next.views) {
+        next.views = next.views.map(view => ({
+          ...view,
+          selectedIds: view.selectedIds.filter(id => !removed.has(id)),
+          state: {
+            ...view.state,
+            hiddenIds: view.state.hiddenIds.filter(id => !removed.has(id)),
+            focusIds: view.state.focusIds ? view.state.focusIds.filter(id => !removed.has(id)) : null,
+          },
+        }))
+      }
     }
     if (command.type === 'pin') next.elements = next.elements.map(element => command.ids.includes(element.data.id!) && !isEdge(element) ? { ...element, data: { ...element.data, pinned: command.pinned } } : element)
     if (command.type === 'positions') {
@@ -77,8 +123,8 @@ export function applyGraphCommands(document: GraphDocument, commands: GraphComma
       for (const [id, position] of Object.entries(command.positions)) {
         const node = nodes.get(id)
         if (!node) throw new Error(`No node "${id}".`)
-        if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) throw new Error(`Invalid position for "${id}".`)
-        if (!node.data.pinned) node.position = { ...position }
+        if (!isPlainObject(position) || !Number.isFinite(position.x) || !Number.isFinite(position.y)) throw new Error(`Invalid position for "${id}".`)
+        if (!node.data.pinned) node.position = { x: position.x as number, y: position.y as number }
       }
     }
   }

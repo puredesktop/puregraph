@@ -1,5 +1,5 @@
 import type { GraphExportOptions } from '../canvas/graphExport'
-import type { queryGraph, analyzeGraph, GraphViewState } from '../lib/graphExplore'
+import type { queryGraph, analyzeGraph } from '../lib/graphExplore'
 import type { GraphDocument } from '../lib/graphDocument'
 import type { GraphCommand } from '../lib/graphCommands'
 import type { GraphElement } from '../lib/graphParser'

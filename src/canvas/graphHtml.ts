@@ -30,16 +30,41 @@ export function graphHtmlPayload(document: GraphDocument, options: GraphHtmlOpti
     // or duplicate palette implementation is needed in the offline viewer.
     if (element.data.source === undefined) {
       for (const rule of sourceStyles) {
-        if (rule.selector !== 'node' && rule.selector !== 'node[size]') continue
-        if (rule.selector === 'node[size]' && element.data.size === undefined) continue
+        if (rule.selector !== 'node' && !rule.selector.startsWith('node[size]')) continue
+        if (rule.selector.startsWith('node[size]') && (element.data.size === undefined || element.data.size === '')) continue
         const computed = Object.fromEntries(Object.entries(rule.style).filter(([, value]) => typeof value === 'function').map(([key, value]) => [key, (value as Function)({ data: (key?: string) => key ? element.data[key] : element.data })]))
-        styles.push({ selector: `.export-${index}`, style: computed })
+        if (Object.keys(computed).length) styles.push({ selector: `.export-${index}`, style: computed })
+      }
+    } else {
+      for (const rule of sourceStyles) {
+        if (rule.selector !== 'edge') continue
+        const computed = Object.fromEntries(Object.entries(rule.style).filter(([, value]) => typeof value === 'function').map(([key, value]) => [key, (value as Function)({ data: (key?: string) => key ? element.data[key] : element.data })]))
+        if (Object.keys(computed).length) styles.push({ selector: `.export-${index}`, style: computed })
       }
     }
     return { data, position: element.position ? { ...element.position } : undefined, classes: `export-${index}` }
   })
   const exportedIds = new Set(exported.map(element => element.data.id))
-  const views = options.includeViews === false ? [] : (document.views ?? []).map(view => ({ id: view.id, name: view.name, caption: view.caption, hidden: [], focus: viewElements(document.elements, view.state).map(element => element.data.id).filter(id => exportedIds.has(id)), selectedIds: view.selectedIds.filter(id => exportedIds.has(id)) }))
+  const views = options.includeViews === false ? [] : (document.views ?? []).map(view => {
+    const hasNonCategoryFilter =
+      view.state.focusIds !== null ||
+      view.state.hiddenIds.length > 0 ||
+      Boolean(view.state.time?.field)
+    const focus = hasNonCategoryFilter
+      ? viewElements(document.elements, { ...view.state, hiddenCategories: [] })
+          .map(element => element.data.id)
+          .filter(id => exportedIds.has(id))
+      : null
+    return {
+      id: view.id,
+      name: view.name,
+      caption: view.caption,
+      hidden: [...view.state.hiddenCategories],
+      focus,
+      selectedIds: view.selectedIds.filter(id => exportedIds.has(id)),
+      ...(view.viewport ? { pan: { ...view.viewport.pan }, zoom: view.viewport.zoom } : {}),
+    }
+  })
   return { views, initialViewId: options.initialViewId, legend: encodingLegend(document), title: document.title, background: document.style.backgroundColor, directed: document.style.directed, elements: exported, styles }
 }
 export function graphHtml(document: GraphDocument, options: GraphHtmlOptions = {}, selectedIds: string[] = []): string {

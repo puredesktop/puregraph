@@ -1,6 +1,7 @@
-import type { StylesheetStyle, NodeSingular } from 'cytoscape'
+import type { StylesheetStyle, NodeSingular, EdgeSingular } from 'cytoscape'
 import type { GraphStyleState } from '../agents/context'
 import { readableTextColor } from '../lib/contrast'
+import { isSafeColor, safeColorString } from '../lib/graphDocument'
 
 export const CLUSTER_COLORS: Record<string, string> = {
   source: '#526070',
@@ -76,7 +77,7 @@ export function buildStyle(style: GraphStyleState): StylesheetStyle[] {
       },
     },
     {
-      selector: 'node[size]',
+      selector: 'node[size][size != ""]',
       style: {
         // An explicit size is an instruction, so honour it — but wrap the
         // label to fit rather than letting it run past the edge.
@@ -88,7 +89,7 @@ export function buildStyle(style: GraphStyleState): StylesheetStyle[] {
       },
     },
     {
-      selector: 'node[borderWidth]',
+      selector: 'node[borderWidth][borderWidth != ""]',
       style: {
         'border-width': 'data(borderWidth)',
       },
@@ -104,8 +105,8 @@ export function buildStyle(style: GraphStyleState): StylesheetStyle[] {
       selector: 'edge',
       style: {
         width: style.edgeWidth,
-        'line-color': style.edgeColor,
-        'target-arrow-color': style.edgeColor,
+        'line-color': (element: EdgeSingular) => graphEdgeColor(element.data(), style),
+        'target-arrow-color': (element: EdgeSingular) => graphEdgeColor(element.data(), style),
         'target-arrow-shape': style.directed ? 'triangle' : 'none',
         'curve-style': style.curveStyle,
         label: style.showLabels && style.showEdgeLabels ? 'data(label)' : '',
@@ -124,14 +125,13 @@ export function buildStyle(style: GraphStyleState): StylesheetStyle[] {
       },
     },
     {
-      selector: 'edge[color]',
+      selector: 'edge:loop',
       style: {
-        'line-color': 'data(color)',
-        'target-arrow-color': 'data(color)',
+        'curve-style': 'bezier',
       },
     },
     {
-      selector: 'edge[width]',
+      selector: 'edge[width][width != ""]',
       style: {
         width: 'data(width)',
       },
@@ -149,8 +149,17 @@ export function buildStyle(style: GraphStyleState): StylesheetStyle[] {
   ]
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
 
 export function graphNodeColor(data: Record<string, unknown>, style: GraphStyleState): string {
-  const category = String(data.category ?? data.cluster ?? 'Nodes')
-  return typeof data.color === 'string' ? data.color : style.categoryColors?.[category] ?? CLUSTER_COLORS[category] ?? style.nodeColor
+  const category = nonEmptyString(data.category) ?? nonEmptyString(data.cluster) ?? 'Nodes'
+  const explicit = isSafeColor(data.color) ? data.color.trim() : undefined
+  return explicit ?? (safeColorString(style.categoryColors?.[category], '') || CLUSTER_COLORS[category] || safeColorString(style.nodeColor, '#668b9b'))
+}
+
+export function graphEdgeColor(data: Record<string, unknown>, style: GraphStyleState): string {
+  const explicit = isSafeColor(data.color) ? data.color.trim() : undefined
+  return explicit ?? safeColorString(style.edgeColor, '#9aa8b6')
 }
