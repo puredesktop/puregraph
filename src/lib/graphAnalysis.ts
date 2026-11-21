@@ -76,3 +76,101 @@ export function findCycle(elements: GraphElement[], directed: boolean): string[]
   }
   return null
 }
+
+/** Deduplicated node IDs plus the connecting cycle edge IDs for selecting a cycle cleanly. */
+export function cycleSelectionIds(elements: GraphElement[], cycle: string[], directed: boolean): string[] {
+  const uniqueNodes = [...new Set(cycle)]
+  const edges = elements.filter(isEdge)
+  const usedEdges = new Set<string>()
+  const edgeIds: string[] = []
+  for (let i = 0; i < cycle.length - 1; i++) {
+    const from = cycle[i]!, to = cycle[i + 1]!
+    const match = edges.find(edge => {
+      const id = edge.data.id!
+      if (usedEdges.has(id)) return false
+      if (edge.data.source === from && edge.data.target === to) return true
+      return !directed && edge.data.source === to && edge.data.target === from
+    })
+    if (match) {
+      usedEdges.add(match.data.id!)
+      edgeIds.push(match.data.id!)
+    }
+  }
+  return [...uniqueNodes, ...edgeIds]
+}
+
+export interface GraphHubMetric {
+  id: string
+  label: string
+  degree: number
+  inDegree: number
+  outDegree: number
+}
+
+export interface GraphMetrics {
+  nodeCount: number
+  edgeCount: number
+  density: number
+  averageDegree: number
+  selfLoopCount: number
+  isolatedNodeIds: string[]
+  topHubs: GraphHubMetric[]
+}
+
+/** Summary network metrics for the Review panel: density, degree, loops, orphans, and hubs. */
+export function graphMetrics(elements: GraphElement[], directed: boolean): GraphMetrics {
+  const nodes = elements.filter(element => !isEdge(element))
+  const edges = elements.filter(isEdge)
+  const inDeg = new Map<string, number>()
+  const outDeg = new Map<string, number>()
+  for (const node of nodes) {
+    const id = node.data.id!
+    inDeg.set(id, 0)
+    outDeg.set(id, 0)
+  }
+  let selfLoopCount = 0
+  const uniqueNonLoopPairs = new Set<string>()
+  for (const edge of edges) {
+    const src = edge.data.source!
+    const tgt = edge.data.target!
+    if (outDeg.has(src)) outDeg.set(src, outDeg.get(src)! + 1)
+    if (inDeg.has(tgt)) inDeg.set(tgt, inDeg.get(tgt)! + 1)
+    if (src === tgt) {
+      selfLoopCount++
+    } else {
+      const pairKey = directed ? `${src}\0${tgt}` : src < tgt ? `${src}\0${tgt}` : `${tgt}\0${src}`
+      uniqueNonLoopPairs.add(pairKey)
+    }
+  }
+  const nodeCount = nodes.length
+  const edgeCount = edges.length
+  const possible = nodeCount > 1 ? (directed ? nodeCount * (nodeCount - 1) : (nodeCount * (nodeCount - 1)) / 2) : 0
+  const density = possible > 0 ? uniqueNonLoopPairs.size / possible : 0
+  const averageDegree = nodeCount > 0 ? (2 * edgeCount) / nodeCount : 0
+  const isolatedNodeIds: string[] = []
+  const hubList: GraphHubMetric[] = []
+  for (const node of nodes) {
+    const id = node.data.id!
+    const inDegree = inDeg.get(id) ?? 0
+    const outDegree = outDeg.get(id) ?? 0
+    const degree = inDegree + outDegree
+    if (degree === 0) isolatedNodeIds.push(id)
+    hubList.push({
+      id,
+      label: String(node.data.label || id),
+      degree,
+      inDegree,
+      outDegree,
+    })
+  }
+  hubList.sort((a, b) => b.degree - a.degree || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  return {
+    nodeCount,
+    edgeCount,
+    density,
+    averageDegree,
+    selfLoopCount,
+    isolatedNodeIds,
+    topHubs: hubList.filter(hub => hub.degree > 0).slice(0, 5),
+  }
+}

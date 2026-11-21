@@ -4,7 +4,7 @@ import { graphLegend } from '../lib/graphLegend'
 import { readableTextColor } from '../lib/contrast'
 import cytoscape from 'cytoscape'
 import svgExtension from 'cytoscape-svg'
-import type { GraphDocument } from '../lib/graphDocument'
+import { safeColorString, type GraphDocument } from '../lib/graphDocument'
 import { buildStyle } from './graphStyle'
 import { toElements } from './graphCanvas'
 cytoscape.use(svgExtension)
@@ -13,8 +13,8 @@ export interface GraphExportOptions { width: number; height: number; transparent
 export const DEFAULT_EXPORT_OPTIONS: GraphExportOptions = { width: 1600, height: 1000, transparent: false }
 
 /** Uses the same Cytoscape renderer and style as the editor, without selection decoration. */
-export async function graphSvg(document: GraphDocument, options: GraphExportOptions): Promise<string> {
-  document = encodedGraphDocument(document)
+export async function graphSvg(rawDocument: GraphDocument, options: GraphExportOptions): Promise<string> {
+  const document = encodedGraphDocument(rawDocument)
   for (const value of [options.width, options.height]) if (!Number.isInteger(value) || value < 100 || value > 8192) throw new Error('Export dimensions must be whole numbers between 100 and 8192 pixels.')
   if (!document.elements.length) throw new Error('Add nodes before exporting an image.')
   const container = window.document.createElement('div')
@@ -33,13 +33,13 @@ export async function graphSvg(document: GraphDocument, options: GraphExportOpti
     const svg = xml.documentElement
     if (xml.querySelector('parsererror')) throw new Error('Could not render the graph as SVG.')
     const width = Number.parseFloat(svg.getAttribute('width') || '1000'), height = Number.parseFloat(svg.getAttribute('height') || '800')
-    const legend = document.style.showLegend ? graphLegend(document) : []
+    const legend = document.style.showLegend ? graphLegend(rawDocument) : []
     const totalWidth = Math.max(width, ...legend.map(entry => entry.label.length * 8 + 48))
     const totalHeight = height + (legend.length ? legend.length * 22 + 20 : 0)
     svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`)
     legend.forEach((entry, index) => {
       const swatch = xml.createElementNS('http://www.w3.org/2000/svg', 'rect')
-      swatch.setAttribute('x', '12'); swatch.setAttribute('y', String(height + 14 + index * 22)); swatch.setAttribute('width', '12'); swatch.setAttribute('height', '12'); swatch.setAttribute('fill', entry.color)
+      swatch.setAttribute('x', '12'); swatch.setAttribute('y', String(height + 14 + index * 22)); swatch.setAttribute('width', '12'); swatch.setAttribute('height', '12'); swatch.setAttribute('fill', safeColorString(entry.color, document.style.nodeColor))
       const label = xml.createElementNS('http://www.w3.org/2000/svg', 'text')
       label.setAttribute('x', '32'); label.setAttribute('y', String(height + 25 + index * 22)); label.setAttribute('font-size', '13'); label.setAttribute('font-family', 'sans-serif'); label.setAttribute('fill', readableTextColor(document.style.backgroundColor)); label.textContent = entry.label
       svg.append(swatch, label)
@@ -53,7 +53,7 @@ export async function graphSvg(document: GraphDocument, options: GraphExportOpti
     xml.replaceChild(output, svg)
     if (!options.transparent) {
       const background = xml.createElementNS('http://www.w3.org/2000/svg', 'rect')
-      background.setAttribute('width', '100%'); background.setAttribute('height', '100%'); background.setAttribute('fill', document.style.backgroundColor)
+      background.setAttribute('width', '100%'); background.setAttribute('height', '100%'); background.setAttribute('fill', safeColorString(document.style.backgroundColor, '#ffffff'))
       output.append(background)
     }
     output.append(svg)

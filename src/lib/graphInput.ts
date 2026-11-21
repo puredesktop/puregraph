@@ -18,12 +18,13 @@ function tableRows(text: string): string[][] {
 }
 /** Shared parser for pasted data, files, documents and assistant tools. Repairs are reported. */
 export function parseGraphInput(text: string): { elements: GraphElement[]; notes: string[] } {
-  if (!text.trim()) throw new Error('No data provided. Paste JSON or a table first.')
+  const clean = text.replace(/^\uFEFF/, '')
+  if (!clean.trim()) throw new Error('No data provided. Paste JSON or a table first.')
   let list: unknown[], table = false
   const notes: string[] = []
-  if (/^\s*[\[{]/.test(text)) {
+  if (/^\s*[\[{]/.test(clean)) {
     let parsed: any
-    try { parsed = JSON.parse(text) } catch (error) { throw new Error(`Invalid JSON: ${String(error)}`) }
+    try { parsed = JSON.parse(clean) } catch (error) { throw new Error(`Invalid JSON: ${String(error)}`) }
     if (!parsed || typeof parsed !== 'object') throw new Error('Unrecognized JSON graph shape.')
     if (parsed.schemaVersion !== undefined && parsed.schemaVersion !== 1) throw new Error('This graph uses an unsupported document version.')
     const body = parsed.elements ?? parsed
@@ -32,7 +33,9 @@ export function parseGraphInput(text: string): { elements: GraphElement[]; notes
     else throw new Error('Unrecognized JSON graph shape. Expected elements, or nodes and edges.')
   } else {
     table = true
-    const rows = tableRows(text), first = rows[0].map(cell => cell.toLowerCase().replace(/^from$/, 'source').replace(/^to$/, 'target'))
+    const rows = tableRows(clean)
+    if (!rows.length) throw new Error('No data provided. Paste JSON or a table first.')
+    const first = rows[0].map(cell => cell.toLowerCase().replace(/^from$/, 'source').replace(/^to$/, 'target'))
     const hasHeader = first.includes('id') || first.includes('source') || first.includes('target')
     const header = hasHeader ? first : ['source', 'target', ...(rows[0].length > 2 ? ['label'] : [])]
     if (new Set(header).size !== header.length || header.some(key => !key)) throw new Error('Column names must be nonempty and unique.')
@@ -45,6 +48,11 @@ export function parseGraphInput(text: string): { elements: GraphElement[]; notes
     })
     if (!list.length) throw new Error('No edges parsed or nodes found in the table.')
   }
+  const parseCoord = (v: unknown): number => {
+    if (typeof v === 'number') return v
+    if (typeof v === 'string' && v.trim() !== '') return Number(v)
+    return NaN
+  }
   const used = new Set<string>(), elements: GraphElement[] = [], automatic: GraphElement[] = []
   for (const value of list) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Each element must be an object.')
@@ -52,7 +60,8 @@ export function parseGraphInput(text: string): { elements: GraphElement[]; notes
     if (data.source === undefined && data.from !== undefined) data.source = data.from
     if (data.target === undefined && data.to !== undefined) data.target = data.to
     const edge = data.source !== undefined || data.target !== undefined
-    const position = raw.position ?? (Number.isFinite(data.x) && Number.isFinite(data.y) ? { x: data.x, y: data.y } : undefined)
+    const px = parseCoord(data.x), py = parseCoord(data.y)
+    const position = raw.position ?? (!edge && Number.isFinite(px) && Number.isFinite(py) ? { x: px, y: py } : undefined)
     delete data.x; delete data.y; delete data.position; delete data.group
     for (const key of ['id', 'source', 'target', 'label']) if (data[key] != null) data[key] = String(data[key])
     if (edge && (!data.source || !data.target)) throw new Error('Every edge needs a source and target.')

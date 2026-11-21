@@ -108,8 +108,7 @@ make a graph look cleaner. Category labels and shapes complement color.
 
 `loadGraph` accepts JSON/CSV/TSV data and needs `replace:true` for a nonempty graph.
 `clearGraph` needs `confirm:true`; these flags do not apply the staged proposal.
-Opening a built-in sample through `loadGraph(sample)` is different: it opens a
-separate document directly. Never open samples to evade a pending edit.
+For new illustrative examples, use `createGraph` with `synthetic: true` rather than replacing the open graph.
 
 `saveGraph` and `exportGraph` operate on the APPLIED document, never the pending
 proposal. Save returns the artifact path. Export supports SVG, PNG and JSON;

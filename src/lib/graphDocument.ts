@@ -58,10 +58,26 @@ function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
-// Cytoscape accepts any CSS colour and the label-contrast helper tolerates
-// what it cannot parse, so a colour only has to be a non-empty string.
+// Strict CSS color allowlist: hex, ASCII named colors, and standard color functions
+// with numeric/percentage/angle arguments (rejects url(), image-set(), expression(), var(), etc.).
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const NAMED_COLOR_RE = /^[a-z]{3,25}$/i
+const COLOR_FN_RE =
+  /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(\s*[0-9.+%-]+(?:\s*(?:deg|rad|grad|turn))?(?:[\s,/]+[0-9.+%-]+(?:\s*(?:deg|rad|grad|turn))?){2,3}\s*\)$/i
+
+export function isSafeColor(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  return HEX_COLOR_RE.test(trimmed) || NAMED_COLOR_RE.test(trimmed) || COLOR_FN_RE.test(trimmed)
+}
+
+export function safeColorString(value: unknown, fallback: string): string {
+  return isSafeColor(value) ? value.trim() : fallback
+}
+
 function colorString(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.trim() ? value.trim() : fallback
+  return safeColorString(value, fallback)
 }
 
 /** Whatever a file or sample supplies, completed to a full, typed style. */
@@ -124,9 +140,10 @@ export function graphDocumentFromSample(sample: GraphSample): GraphDocument {
 }
 
 export function parseGraphDocument(text: string): GraphDocument {
+  const clean = text.replace(/^\uFEFF/, '')
   let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    parsed = JSON.parse(clean)
   } catch (error) {
     throw new Error(
       `Not a graph document: ${error instanceof Error ? error.message : String(error)}`,

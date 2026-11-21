@@ -1,4 +1,4 @@
-import { graphContentFingerprint, type GraphDocument } from './graphDocument'
+import { graphContentFingerprint, parseGraphDocument, type GraphDocument } from './graphDocument'
 import { applyGraphCommands, graphChangeSummary, type GraphCommand } from './graphCommands'
 export interface GraphProposal {
   id: string; title: string; base: string; next: GraphDocument
@@ -18,13 +18,17 @@ export function acceptGraphProposal(document: GraphDocument, proposal: GraphProp
 export function readStoredProposal(key: string): GraphProposal | null {
   try {
     const proposal = JSON.parse(localStorage.getItem(`puregraph.proposal:${key}`) || 'null')
-    if (!proposal || typeof proposal.id !== 'string' || typeof proposal.title !== 'string' || typeof proposal.base !== 'string' || !proposal.impact) return null
-    // Validate stored data through the same transaction boundary before exposing Apply.
-    applyGraphCommands(proposal.next, [])
-    return proposal
+    if (!proposal || typeof proposal.id !== 'string' || typeof proposal.title !== 'string' || typeof proposal.base !== 'string' || !proposal.impact || !proposal.next) return null
+    // Validate stored data through document parsing and the transaction boundary before exposing Apply.
+    const next = applyGraphCommands(parseGraphDocument(JSON.stringify(proposal.next)), [])
+    return { ...proposal, next }
   } catch { return null }
 }
 export function storeProposal(key: string, proposal: GraphProposal | null): void {
-  if (proposal) localStorage.setItem(`puregraph.proposal:${key}`, JSON.stringify(proposal))
-  else localStorage.removeItem(`puregraph.proposal:${key}`)
+  try {
+    if (proposal) localStorage.setItem(`puregraph.proposal:${key}`, JSON.stringify(proposal))
+    else localStorage.removeItem(`puregraph.proposal:${key}`)
+  } catch {
+    // Storage quota or restricted storage must not break editing or document binding.
+  }
 }

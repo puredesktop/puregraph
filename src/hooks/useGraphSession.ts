@@ -18,6 +18,7 @@ export function useGraphSession() {
     return next.present
   }, [])
   const commit = useCallback((document: GraphDocument) => publish(commitGraph(ref.current, document)), [publish])
+  const replacePresent = useCallback((document: GraphDocument) => publish({ ...ref.current, present: document }), [publish])
   const adopt = useCallback((document: GraphDocument, key = `unsaved:${crypto.randomUUID()}`) => {
     gesture.current = { key: '', at: 0 }
     keyRef.current = key
@@ -34,7 +35,15 @@ export function useGraphSession() {
   const move = useCallback((direction: 'undo' | 'redo') => { gesture.current = { key: '', at: 0 }; return publish(moveGraphHistory(ref.current, direction)) }, [publish])
   const execute = useCallback((commands: GraphCommand[]) => {
     const next = applyGraphCommands(ref.current.present, commands)
-    const key = commands.length === 1 && commands[0].type === 'style' ? Object.keys(commands[0].style).sort().join(',') : ''
+    let key = ''
+    if (commands.length === 1) {
+      const cmd = commands[0]!
+      if (cmd.type === 'style') {
+        key = `style:${Object.keys(cmd.style).sort().join(',')}`
+      } else if (cmd.type === 'update') {
+        key = `update:${[...cmd.ids].sort().join(',')}:${Object.keys(cmd.data).sort().join(',')}`
+      }
+    }
     const coalesce = key && gesture.current.key === key && Date.now() - gesture.current.at < 400
     gesture.current = { key, at: Date.now() }
     return coalesce ? publish({ ...ref.current, present: next, future: [] }) : commit(next)
@@ -54,6 +63,6 @@ export function useGraphSession() {
     discardProposal()
     return commit(next)
   }, [commit, discardProposal])
-  return { bindKey, proposal, propose, applyProposal, discardProposal, execute, document: history.present, commit, adopt, move,
+  return { bindKey, proposal, propose, applyProposal, discardProposal, execute, document: history.present, commit, replacePresent, adopt, move,
     canUndo: history.past.length > 0, canRedo: history.future.length > 0 }
 }

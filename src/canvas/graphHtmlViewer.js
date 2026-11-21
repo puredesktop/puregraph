@@ -7,7 +7,16 @@
   const make = (tag, text) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node; };
   const button = (text, action) => { const node = make('button', text); node.addEventListener('click', action); return node; };
   const label = item => String(item.data('label') || item.id());
-  const category = item => String(item.data('category') ?? item.data('cluster') ?? 'Nodes');
+  const category = item => {
+    const cat = item.data('category');
+    if (cat !== undefined && cat !== null && String(cat).trim()) return String(cat).trim();
+    const cluster = item.data('cluster');
+    if (cluster !== undefined && cluster !== null && String(cluster).trim()) return String(cluster).trim();
+    return 'Nodes';
+  };
+  const makeId = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : 'v-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   el('title').textContent = payload.title;
   document.title = `${payload.title} · PureGraph`;
   el('graph').style.backgroundColor = payload.background;
@@ -119,7 +128,7 @@
   }
   el('save-view').addEventListener('click', () => {
     const caption = el('view-name').value.trim(); if (!caption) { say('Give this view a caption first.'); el('view-name').focus(); return; }
-    savedViews.push({ id: crypto.randomUUID(), name: caption, caption, hidden: [...hiddenCategories], focus: focusIds ? [...focusIds] : null, pan: { ...cy.pan() }, zoom: cy.zoom(), selectedIds: cy.$(':selected').map(item => item.id()) });
+    savedViews.push({ id: makeId(), name: caption, caption, hidden: [...hiddenCategories], focus: focusIds ? [...focusIds] : null, pan: { ...cy.pan() }, zoom: cy.zoom(), selectedIds: cy.$(':selected').map(item => item.id()) });
     renderViews(); el('view-name').value = ''; say(`Saved view: ${caption}. Download a new HTML copy to keep it.`);
   });
   el('download-views').addEventListener('click', () => {
@@ -130,7 +139,7 @@
   });
   renderViews();
   cy.on('tap', 'node, edge', event => inspect(event.target));
-  new ResizeObserver(() => { cy.resize(); fit(); }).observe(el('graph'));
+  new ResizeObserver(() => { cy.resize(); }).observe(el('graph'));
   applyFilter();
   const initial = savedViews.find(view => view.id === payload.initialViewId);
   if (initial) openSaved(initial);

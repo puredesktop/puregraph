@@ -4,9 +4,10 @@ import { isEdge, validateElements } from './graphCommands'
 
 import { parseGraphInput } from './graphInput'
 export function previewGraphImport(text: string): { elements: GraphElement[]; notes: string[]; document?: GraphDocument } {
-  const parsed = parseGraphInput(text)
-  if (/^\s*\{/.test(text) && JSON.parse(text).schemaVersion === 1) {
-    const document = parseGraphDocument(text)
+  const clean = text.replace(/^\uFEFF/, '')
+  const parsed = parseGraphInput(clean)
+  if (/^\s*\{/.test(clean) && JSON.parse(clean).schemaVersion === 1) {
+    const document = parseGraphDocument(clean)
     return { ...parsed, document, notes: [...parsed.notes, 'Full document: Replace also restores title, layout and styling. Merge uses only its elements.'] }
   }
   return parsed

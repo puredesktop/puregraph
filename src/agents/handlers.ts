@@ -96,7 +96,7 @@ export async function loadGraphHandler(
   const data = getString(invoke.arguments, 'data')
   if (!data) {
     throw new GraphToolError(
-      'Provide graph data (JSON, CSV, or TSV), or a sample id to open a built-in sample.',
+      'Provide graph data (JSON, CSV, or TSV).',
     )
   }
   const parsed = parseGraphInput(data)

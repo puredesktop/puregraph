@@ -14,19 +14,29 @@ function edgesOf(text: string) {
   return parseGraph(text).filter(element => element.group === 'edges')
 }
 
+const EDGE_LIST_FIXTURE = [
+  'source,target,label',
+  'satellite,heat,surface temp',
+  'heat,grid,peak load',
+  'grid,transit,power',
+  'transit,emissions,mode shift',
+  'emissions,heat,warming',
+].join('\n')
+
 describe('graph parser', () => {
   it('parses csv edge lists and creates missing nodes', () => {
-    const elements = parseGraph(SAMPLE_GRAPH)
+    const elements = parseGraph(EDGE_LIST_FIXTURE)
     const nodes = elements.filter(element => element.group === 'nodes')
     const edges = elements.filter(element => element.group === 'edges')
 
-    expect(nodes).toHaveLength(24)
-    expect(edges).toHaveLength(40)
+    expect(nodes).toHaveLength(5)
+    expect(edges).toHaveLength(5)
     expect(edges[0].data).toMatchObject({
       source: 'satellite',
       target: 'heat',
       label: 'surface temp',
     })
+    expect(SAMPLE_GRAPH).toBe('')
   })
 
   it('parses node and edge JSON', () => {

@@ -45,10 +45,24 @@ export function generateGraphPalette(count: number, background: string): { color
   return { colors, overflow: Math.max(0, count - colors.length), neutral }
 }
 
+function normalizeHex6(value: string): string {
+  const raw = value.trim().replace(/^#/, '')
+  const full = raw.length === 3 ? raw.split('').map(c => c + c).join('') : raw
+  return `#${full.toLowerCase()}`
+}
+
+function explicitCategory(data: Record<string, unknown>): string {
+  const cat = data.category
+  if (cat !== undefined && cat !== null && String(cat).trim()) return String(cat).trim()
+  const cluster = data.cluster
+  if (cluster !== undefined && cluster !== null && String(cluster).trim()) return String(cluster).trim()
+  return ''
+}
+
 export function graphColorGroups(document: GraphDocument) {
   const groups = new Map<string, { label: string; ids: string[] }>()
-  const unnamedColors = [...new Set(document.elements.filter(el => !isEdge(el) && !el.data.category && !el.data.cluster).map(el => graphNodeColor(el.data, document.style)))].sort()
-  const usedNames = new Set(document.elements.flatMap(el => [String(el.data.category ?? el.data.cluster ?? '')]))
+  const unnamedColors = [...new Set(document.elements.filter(el => !isEdge(el) && !explicitCategory(el.data)).map(el => graphNodeColor(el.data, document.style)))].sort()
+  const usedNames = new Set(document.elements.flatMap(el => [explicitCategory(el.data)]))
   const unnamedNames = unnamedColors.map((_, index) => {
     let name = `Color group ${index + 1}`
     while (usedNames.has(name)) name += ' (unassigned)'
@@ -56,7 +70,7 @@ export function graphColorGroups(document: GraphDocument) {
     return name
   })
   for (const node of document.elements.filter(el => !isEdge(el))) {
-    const explicit = String(node.data.category ?? node.data.cluster ?? '')
+    const explicit = explicitCategory(node.data)
     const index = unnamedColors.indexOf(graphNodeColor(node.data, document.style))
     const label = explicit || unnamedNames[index]!
     const group = groups.get(label) ?? { label, ids: [] }
@@ -83,7 +97,7 @@ export function reviewGraphColors(document: GraphDocument): string[] {
   const entries = new Map<string, { label: string; color: string }>()
   for (const node of document.elements.filter(el => !isEdge(el))) {
     const color = graphNodeColor(node.data, document.style)
-    const label = String(node.data.category ?? node.data.cluster ?? `Color ${color}`)
+    const label = explicitCategory(node.data) || `Color ${color}`
     entries.set(`${label}\0${color}`, { label, color })
   }
   const colors = [...entries.values()]
@@ -101,8 +115,12 @@ export function reviewGraphColors(document: GraphDocument): string[] {
   if (valid.length > measured.length) warnings.push('Only the first 100 color groups were checked for pair separation. Reduce the number of categories.')
   if (close) warnings.push(`${close} category pairs are too similar in one or more vision checks. Use distinct shapes and labels, or generate a palette in Style.`)
   if (!document.style.showLabels && colors.length > 1) warnings.push('Node labels are hidden. Keep labels or distinct shapes so color is not the only cue.')
-  const composite = (color: string, opacity: number) => '#' + [1, 3, 5].map(offset => Math.round(parseInt(color.slice(offset, offset + 2), 16) * opacity + parseInt(background.slice(offset, offset + 2), 16) * (1 - opacity)).toString(16).padStart(2, '0')).join('')
-  const edgeColors = [...new Set(document.elements.filter(isEdge).map(edge => String(edge.data.color || document.style.edgeColor)))]
+  const bgHex = normalizeHex6(background)
+  const composite = (color: string, opacity: number) => {
+    const fgHex = normalizeHex6(color)
+    return '#' + [1, 3, 5].map(offset => Math.round(parseInt(fgHex.slice(offset, offset + 2), 16) * opacity + parseInt(bgHex.slice(offset, offset + 2), 16) * (1 - opacity)).toString(16).padStart(2, '0')).join('')
+  }
+  const edgeColors = [...new Set(document.elements.filter(isEdge).map(edge => (typeof edge.data.color === 'string' && edge.data.color.trim() ? edge.data.color.trim() : document.style.edgeColor)))]
   if (edgeColors.some(color => !isHexColor(color))) warnings.push('Some edge/arrow colors cannot be measured; use hex colors.')
   if (edgeColors.some(color => isHexColor(color) && contrastRatio(composite(color, 0.7), background) < 3)) warnings.push('Some edges or arrows have low contrast at the rendered opacity. Darken or lighten their colors in Style.')
   if (document.style.showLabels) {
