@@ -1224,6 +1224,7 @@ export function GraphWorkspace({
       exportGraph,
       fit,
       getContext: () => ({ ...graphContext(), views: currentDocument.views?.map(({ id, name, caption }) => ({ id, name, caption })), view, pendingProposalNote: 'Proposals are preserved per document. Apply by ID only when authorized; do not repeat blocked mutations.', pendingProposal: proposal ? { id: proposal.id, title: proposal.title, impact: proposal.impact } : null }),
+      getDocument: () => liveDocument.current,
       applyGraphProposal: async id => { onApplyProposal(id); return JSON.stringify({ status: 'applied', proposalId: id, message: 'Applied as one undoable edit. Autosave is scheduled; call getGraphContext to verify, then saveGraph if a saved artifact is needed.' }) },
       discardGraphProposal: async id => { onDiscardProposal(id); return JSON.stringify({ status: 'discarded', proposalId: id }) },
       loadGraph: async (elements, _source, options) => {

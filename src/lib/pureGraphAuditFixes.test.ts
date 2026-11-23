@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import cytoscape from 'cytoscape'
 import { describe, expect, it, vi } from 'vitest'
 import pluginManifest from '../../plugin.json'
+import { PUREGRAPH_ATOMIC_TOOL_SCHEMAS } from '../agents/atomicToolSchemas'
 import { buildStyle, graphEdgeColor, graphNodeColor } from '../canvas/graphStyle'
 import { restoreGraphCanvas } from '../canvas/graphCanvas'
 import { graphHtml, graphHtmlPayload } from '../canvas/graphHtml'
@@ -116,19 +117,20 @@ describe('PureGraph audit security & validation fixes', () => {
     expect(reviewGraphColors(hashless).join(' ')).toContain('edges or arrows')
   })
 
-  it('maintains plugin.json tool schema parity for proposeGraph and runLayout', () => {
+  it('maintains plugin.json and atomic tool schema parity for proposeGraph, runLayout, and loadGraph', () => {
     const tools = pluginManifest.app.agents.tools
     const propose = tools.find(t => t.name === 'proposeGraph')!
-    const cmdProps = propose.inputSchema.properties.commands!.items.properties
+    const cmdProps = (propose.inputSchema.properties.commands as { items: { properties: Record<string, { enum?: string[] }> } }).items.properties
     expect(cmdProps.type.enum).toContain('encodings')
     expect(cmdProps.type.enum).toContain('views')
     expect(cmdProps).toHaveProperty('encodings')
     expect(cmdProps).toHaveProperty('views')
 
-    const runLayout = tools.find(t => t.name === 'runLayout')!
-    expect(runLayout.inputSchema.properties.name!.enum).toContain('preset')
+    const runLayout = PUREGRAPH_ATOMIC_TOOL_SCHEMAS.find(t => t.name === 'runLayout')!
+    const runLayoutProps = runLayout.inputSchema.properties as { name: { enum: string[] } }
+    expect(runLayoutProps.name.enum).toContain('preset')
 
-    const loadGraph = tools.find(t => t.name === 'loadGraph')!
+    const loadGraph = PUREGRAPH_ATOMIC_TOOL_SCHEMAS.find(t => t.name === 'loadGraph')!
     expect(loadGraph.inputSchema.properties).not.toHaveProperty('sample')
     expect(loadGraph.inputSchema.required).toEqual(['data'])
   })
