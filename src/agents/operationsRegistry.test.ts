@@ -711,6 +711,16 @@ describe('PureGraph composite App Functions (fn_*)', () => {
       ),
     ).rejects.toThrow(/allowDestructiveCommands: true/)
 
+    // Refuses destructive document overwrite without allowDestructiveCommands: true
+    await expect(
+      handlers.fn_editGraphAndApply!(
+        invoke('fn_editGraphAndApply', {
+          title: 'Overwrite whole doc',
+          commands: [{ type: 'document', document: defaultGraphDocument() }],
+        }),
+      ),
+    ).rejects.toThrow(/allowDestructiveCommands: true/)
+
     // Stages preview-only proposal without applying
     const previewRes = await handlers.fn_editGraphAndApply!(
       invoke('fn_editGraphAndApply', {
@@ -837,6 +847,19 @@ describe('PureGraph composite App Functions (fn_*)', () => {
     expect(data.status).toBe('pending')
     expect(data.appliedPolish).toBe(false)
     expect(state.proposal).not.toBeNull()
+    expect(state.exports).toHaveLength(0)
+    expect(state.savedPaths).toHaveLength(0)
+
+    // previewOnly with no polish changes does not save or export
+    const noopRes = await handlers.fn_polishAndExportGraph!(
+      invoke('fn_polishAndExportGraph', {
+        previewOnly: true,
+        save: true,
+        exports: [{ format: 'svg' }],
+      }),
+    )
+    const noopData = JSON.parse(noopRes.content).data
+    expect(noopData.status).toBe('noop')
     expect(state.exports).toHaveLength(0)
     expect(state.savedPaths).toHaveLength(0)
   })

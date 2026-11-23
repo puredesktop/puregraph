@@ -847,11 +847,15 @@ export const fnEditGraphAndApply: AppFunctionDefinition<PureGraphAgentContext> =
       }
       const commands = args.commands as GraphCommand[]
       const hasDestructive = commands.some(
-        cmd => cmd && (cmd.type === 'replace' || cmd.type === 'remove'),
+        cmd =>
+          cmd &&
+          (cmd.type === 'replace' ||
+            cmd.type === 'remove' ||
+            cmd.type === 'document'),
       )
       if (hasDestructive && args.allowDestructiveCommands !== true) {
         throw new GraphToolError(
-          'Commands include destructive "replace" or "remove" operations. Re-call fn_editGraphAndApply with allowDestructiveCommands: true after confirming with the user.',
+          'Commands include destructive "replace", "remove", or "document" operations. Re-call fn_editGraphAndApply with allowDestructiveCommands: true after confirming with the user.',
         )
       }
 
@@ -1125,7 +1129,22 @@ export const fnPolishAndExportGraph: AppFunctionDefinition<PureGraphAgentContext
         }
         await ctx.applyGraphProposal(proposalId)
         appliedPolish = true
-        postPolishDoc = applyGraphCommands(doc, polishCommands)
+        postPolishDoc = ctx.getDocument
+          ? ctx.getDocument()
+          : applyGraphCommands(doc, polishCommands)
+      } else if (args.previewOnly === true) {
+        return {
+          summary: 'Preview requested with no palette, style, or layout changes to stage.',
+          mutated: false,
+          data: {
+            status: 'noop',
+            appliedPolish: false,
+            proposalId: null,
+            discardedProposalId: null,
+            polishSteps: [],
+            impact: null,
+          },
+        }
       }
 
       let savedViewMessage: string | null = null
