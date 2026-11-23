@@ -63,6 +63,7 @@ export function useGraphSession() {
     discardProposal()
     return commit(next)
   }, [commit, discardProposal])
-  return { bindKey, proposal, propose, applyProposal, discardProposal, execute, document: history.present, commit, replacePresent, adopt, move,
+  const getProposal = useCallback(() => proposalRef.current, [])
+  return { bindKey, proposal, getProposal, propose, applyProposal, discardProposal, execute, document: history.present, commit, replacePresent, adopt, move,
     canUndo: history.past.length > 0, canRedo: history.future.length > 0 }
 }

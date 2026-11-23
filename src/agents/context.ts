@@ -1,5 +1,5 @@
 import type { GraphExportOptions } from '../canvas/graphExport'
-import type { queryGraph, analyzeGraph } from '../lib/graphExplore'
+import type { queryGraph, analyzeGraph, GraphViewState } from '../lib/graphExplore'
 import type { GraphDocument } from '../lib/graphDocument'
 import type { GraphCommand } from '../lib/graphCommands'
 import type { GraphElement } from '../lib/graphParser'
@@ -50,6 +50,9 @@ export interface GraphContextSummary {
   }>
   selectedIds: string[]
   style: GraphStyleState
+  views?: Array<{ id: string; name: string; caption: string }>
+  view?: GraphViewState
+  pendingProposalNote?: string
   /** True when nodes/edges are capped; counts are always complete. */
   truncated: boolean
   note?: string
@@ -82,6 +85,8 @@ export interface PureGraphAgentContext {
   exportGraph(input: { filename?: string; format?: 'png' | 'svg' | 'json' | 'html'; options?: GraphExportOptions }): Promise<string>
   fit(): void
   getContext(): GraphContextSummary
+  /** Optional uncapped live document reader used by composite analytics & palette workflows. */
+  getDocument?: () => GraphDocument
   loadGraph(
     elements: GraphElement[],
     source: string | undefined,

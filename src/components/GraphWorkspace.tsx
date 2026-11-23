@@ -65,7 +65,7 @@ import {
   type GraphSample,
 } from '../lib/graphParser'
 import { restoreGraphCanvas } from '../canvas/graphCanvas'
-import { DEFAULT_GRAPH_STYLE, safeColorString, serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
+import { DEFAULT_GRAPH_STYLE, DEFAULT_GRAPH_TITLE, safeColorString, serializeGraphDocument, type GraphDocument } from '../lib/graphDocument'
 import { summarizeGraphContext } from '../lib/graphContext'
 import { readableTextColor } from '../lib/contrast'
 import { graphAssetExportPath, isGraphPackagePath, sanitizeFileName } from '../lib/graphPaths'
@@ -84,6 +84,10 @@ interface GraphWorkspaceProps {
   onApplyProposal: (proposalId?: string) => void
   onDiscardProposal: (proposalId?: string) => void
   currentDocument: GraphDocument
+  /** Optional synchronous getters so multi-step composite agent functions observe mutations before React re-renders. */
+  getLiveDocument?: () => GraphDocument
+  getLiveProposal?: () => GraphProposal | null
+  getLiveDocumentPath?: () => string | null
   boot: PureGraphBootState
   documentPath: string | null
   documentTitle: string
@@ -598,7 +602,7 @@ function toColorPickerHex(color: unknown, fallback: string): string {
 }
 
 export function GraphWorkspace({
-  currentDocument, proposal, onPropose, onApplyProposal, onDiscardProposal,
+  currentDocument, getLiveDocument, getLiveProposal, getLiveDocumentPath, proposal, onPropose, onApplyProposal, onDiscardProposal,
   documentPath,
   documentTitle,
   loadedDocument,
@@ -623,9 +627,15 @@ export function GraphWorkspace({
   const collapsed = !controlsOpen
   const showPanel = (panel: string): void => { setActivePanel(panel); setControlsOpen(true) }
   const [view, setView] = useState(emptyGraphView)
+  const viewRef = useRef(view); viewRef.current = view
   const [layoutBusy, setLayoutBusy] = useState(false)
   const layoutAbort = useRef<AbortController | null>(null)
   const liveDocument = useRef(currentDocument); liveDocument.current = currentDocument
+  const proposalRef = useRef(proposal); proposalRef.current = proposal
+  const documentPathRef = useRef(documentPath); documentPathRef.current = documentPath
+  const readLiveDocument = useCallback(() => getLiveDocument?.() ?? liveDocument.current, [getLiveDocument])
+  const readLiveProposal = useCallback(() => (getLiveProposal ? getLiveProposal() : proposalRef.current), [getLiveProposal])
+  const readLiveDocumentPath = useCallback(() => (getLiveDocumentPath ? getLiveDocumentPath() : documentPathRef.current), [getLiveDocumentPath])
 
   useEffect(() => () => layoutAbort.current?.abort(), [])
   const selectionRef = useRef<string[]>([])
@@ -721,20 +731,23 @@ export function GraphWorkspace({
   const fitChangedView = useRef(false)
   const changeExploreView = useCallback((next: GraphViewState) => {
     fitChangedView.current = true
+    viewRef.current = next
     setView(next)
   }, [])
   const openView = useCallback((saved: GraphSavedView) => {
     fitChangedView.current = !saved.viewport
+    viewRef.current = saved.state
     setView(saved.state); selectElements(saved.selectedIds)
     if (saved.viewport) getCy().viewport(saved.viewport)
     setStatus(saved.caption || saved.name)
   }, [getCy, selectElements])
   const saveView = useCallback((name: string, caption: string) => {
     if (!name.trim()) throw new Error('Give this view a name.')
-    if ((currentDocument.views?.length ?? 0) >= 100) throw new Error('This graph has 100 saved views. Remove a view before saving another.')
+    const doc = readLiveDocument()
+    if ((doc.views?.length ?? 0) >= 100) throw new Error('This graph has 100 saved views. Remove a view before saving another.')
     const cy = getCy()
-    onCommand([{ type: 'views', views: [...(currentDocument.views ?? []), { id: crypto.randomUUID(), name: name.trim(), caption, state: view, selectedIds, viewport: { zoom: cy.zoom(), pan: { ...cy.pan() } } }] }])
-  }, [currentDocument.views, view, selectedIds, getCy, onCommand])
+    onCommand([{ type: 'views', views: [...(doc.views ?? []), { id: crypto.randomUUID(), name: name.trim(), caption, state: viewRef.current, selectedIds: selectionRef.current, viewport: { zoom: cy.zoom(), pan: { ...cy.pan() } } }] }])
+  }, [readLiveDocument, getCy, onCommand])
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
@@ -761,9 +774,10 @@ export function GraphWorkspace({
     return `Applied ${name} layout.`
   }, [onCommand, layoutScope, selectedIds, layoutDirection, currentDocument, prepareLayout])
   const prepareProposal = useCallback(async (title: string, commands: GraphCommand[]) => {
-    if (proposal) throw new Error(`Proposal ${proposal.id} is pending. Apply or discard it before preparing another.`)
+    const activeProposal = readLiveProposal()
+    if (activeProposal) throw new Error(`Proposal ${activeProposal.id} is pending. Apply or discard it before preparing another.`)
     if (!Array.isArray(commands) || !commands.length || commands.length > 1000) throw new Error('Provide between 1 and 1000 commands.')
-    const base = currentDocument
+    const base = readLiveDocument()
     let next = base
     for (const command of commands) {
       if (command && typeof command === 'object' && command.type === 'layout') {
@@ -783,9 +797,9 @@ export function GraphWorkspace({
         next = applyGraphCommands(next, [command])
       }
     }
-    if (liveDocument.current !== base) throw new Error('The document changed while preparing this proposal. Read context and prepare it again.')
+    if (readLiveDocument() !== base) throw new Error('The document changed while preparing this proposal. Read context and prepare it again.')
     return onPropose(title, [{ type: 'document', document: next }])
-  }, [currentDocument, onPropose, prepareLayout, proposal])
+  }, [onPropose, prepareLayout, readLiveDocument, readLiveProposal])
 
   useEffect(() => {
     if (!containerRef.current || cyRef.current) return
@@ -900,7 +914,9 @@ export function GraphWorkspace({
       restoreGraphCanvas(cy, document, isNewDocument)
       if (isNewDocument) {
         selectionRef.current = []
-        setView(emptyGraphView())
+        const resetView = emptyGraphView()
+        viewRef.current = resetView
+        setView(resetView)
         setConnectMode(false)
         setConnectSource(null)
         setQuickSearchOpen(false)
@@ -939,7 +955,10 @@ export function GraphWorkspace({
   }, [primarySelectedId, primaryAuthoritativeLabel])
 
   const graphContext = useCallback((): GraphContextSummary => {
-    const nodes = currentDocument.elements
+    const doc = readLiveDocument()
+    const activePath = readLiveDocumentPath()
+    const activeSelected = selectionRef.current
+    const nodes = doc.elements
       .filter(element => !isEdge(element))
       .map(node => ({
         data: {
@@ -952,7 +971,7 @@ export function GraphWorkspace({
         id: String(node.data.id ?? ''),
         label: String(node.data.label ?? node.data.id ?? ''),
       }))
-    const edges = currentDocument.elements
+    const edges = doc.elements
       .filter(isEdge)
       .map(edge => ({
         id: String(edge.data.id ?? ''),
@@ -961,15 +980,15 @@ export function GraphWorkspace({
         label: edge.data.label ? String(edge.data.label) : null,
       }))
     return summarizeGraphContext({
-      title: documentTitle,
-      documentPath,
+      title: doc === currentDocument ? (doc.title || documentTitle) : (doc.title || DEFAULT_GRAPH_TITLE),
+      documentPath: activePath,
       edges,
-      layout,
+      layout: doc.layout,
       nodes,
-      selectedIds,
-      style: styleState,
+      selectedIds: activeSelected,
+      style: doc.style,
     })
-  }, [currentDocument.elements, documentPath, documentTitle, layout, selectedIds, styleState])
+  }, [currentDocument, documentTitle, readLiveDocument, readLiveDocumentPath])
 
   const addNode = useCallback(async ({ id, label }: { id?: string; label?: string }): Promise<string> => {
     const nodeId = id || `n${crypto.randomUUID()}`
@@ -1004,13 +1023,17 @@ export function GraphWorkspace({
   const exportGraph = useCallback(async ({ filename, format = 'png', options = DEFAULT_EXPORT_OPTIONS }: {
     filename?: string; format?: 'png' | 'svg' | 'json' | 'html'; options?: GraphExportOptions
   }): Promise<string> => {
-    const exportDocument = graphExportDocument(currentDocument, options.scope, visibleElements, selectedIds)
+    const doc = readLiveDocument()
+    const activePath = readLiveDocumentPath()
+    const activeSelected = selectionRef.current
+    const activeVisible = viewElements(doc.elements, viewRef.current)
+    const exportDocument = graphExportDocument(doc, options.scope, activeVisible, activeSelected)
     if (!exportDocument.elements.length && options.scope && options.scope !== 'all') throw new Error('This export scope has no elements. Select nodes or reset the view.')
-    const safeName = sanitizeFileName(filename || currentDocument.title, format)
-    const path = graphAssetExportPath(documentPath, safeName, boot.prefs.workingDirectory)
+    const safeName = sanitizeFileName(filename || doc.title, format)
+    const path = graphAssetExportPath(activePath, safeName, boot.prefs.workingDirectory)
     if (format === 'html') {
       const { graphHtml } = await import('../canvas/graphHtml')
-      await writeTextFile(path, graphHtml(exportDocument, options.html, selectedIds))
+      await writeTextFile(path, graphHtml(exportDocument, options.html, activeSelected))
     }
     else if (format === 'json') await writeTextFile(path, serializeGraphDocument(exportDocument))
     else {
@@ -1020,28 +1043,28 @@ export function GraphWorkspace({
       // A figure in the package is a linked one: the library reads which
       // graph it came from and a fingerprint of the graph as saved, so it
       // can say when the nodes and edges have moved on since it was drawn.
-      if (documentPath && isGraphPackagePath(documentPath)) {
-        const collectionPath = documentPath.replace(/\/+$/, '')
-        const fingerprint = graphFingerprint(JSON.parse(serializeGraphDocument(currentDocument)))
+      if (activePath && isGraphPackagePath(activePath)) {
+        const collectionPath = activePath.replace(/\/+$/, '')
+        const fingerprint = graphFingerprint(JSON.parse(serializeGraphDocument(doc)))
         await updateAssetMetadata({
           collectionPath,
           relativePath: `${GRAPH_ASSET_FIGURES_DIR}/${safeName}`,
-          label: currentDocument.title,
-          caption: currentDocument.title,
+          label: doc.title,
+          caption: doc.title,
           description: withLiveSource('PureGraph export linked to its source graph document.', {
             kind: 'graph',
             fingerprint,
             view: options.scope === 'selected' ? 'selection' : options.scope === 'view' ? 'view' : null,
             render: { width: options.width, height: options.height, palette: 'source', format },
           }),
-          sourceDocumentPath: livePathFor(collectionPath, documentPath),
+          sourceDocumentPath: livePathFor(collectionPath, activePath),
           sourceAppSlug: GRAPH_APP_SLUG,
         })
       }
     }
     setStatus(`Saved ${safeName}`)
     return `Saved graph to ${path}`
-  }, [currentDocument, documentPath, boot.prefs.workingDirectory, selectedIds, visibleElements])
+  }, [boot.prefs.workingDirectory, readLiveDocument, readLiveDocumentPath])
 
   const exportGraphUi = useCallback(async (format: GraphUiExportFormat, options: GraphExportOptions): Promise<string> => {
     if (format === 'csv-nodes' || format === 'csv-edges') {
@@ -1062,9 +1085,13 @@ export function GraphWorkspace({
   }, [])
 
   const fit = useCallback(() => {
-    const cy = getCy(); const ids = new Set(visibleElements.map(element => element.data.id)); const included = cy.elements().filter(element => ids.has(element.id())); if (included.length) cy.fit(included, 32)
+    const cy = getCy()
+    const activeVisible = viewElements(readLiveDocument().elements, viewRef.current)
+    const ids = new Set(activeVisible.map(element => element.data.id))
+    const included = cy.elements().filter(element => ids.has(element.id()))
+    if (included.length) cy.fit(included, 32)
     setStatus('Fit graph')
-  }, [getCy, visibleElements])
+  }, [getCy, readLiveDocument])
 
   const zoomBy = useCallback((factor: number) => {
     const cy = cyRef.current
@@ -1195,40 +1222,59 @@ export function GraphWorkspace({
   const saveGraph = useCallback(async (): Promise<string> => {
     const path = await onSaveDocument()
     if (!path) throw new GraphToolError('The graph could not be saved.')
+    documentPathRef.current = path
     return path
   }, [onSaveDocument])
 
   const agentContext = useMemo<PureGraphAgentContext | null>(() => {
     if (!cyReady) return null
     return {
-      queryGraph: input => queryGraph(currentDocument.elements, input),
-      analyzeGraph: input => analyzeGraph(currentDocument.elements, { ...input, directed: input.directed ?? currentDocument.style.directed }),
+      queryGraph: input => queryGraph(readLiveDocument().elements, input),
+      analyzeGraph: input => { const doc = readLiveDocument(); return analyzeGraph(doc.elements, { ...input, directed: input.directed ?? doc.style.directed }) },
       exploreGraph: input => {
+        const doc = readLiveDocument()
         if (input.action === 'reset') { changeExploreView(emptyGraphView()); selectElements([]); return 'Restored the whole graph.' }
-        if (input.action === 'openView') { const saved = currentDocument.views?.find(view => view.id === input.viewId); if (!saved) throw new Error('Unknown saved view. Read getGraphContext.'); openView(saved); return `Opened ${saved.name}.` }
+        if (input.action === 'openView') { const saved = doc.views?.find(view => view.id === input.viewId); if (!saved) throw new Error('Unknown saved view. Read getGraphContext.'); openView(saved); return `Opened ${saved.name}.` }
         const ids = input.ids ?? []
-        if (!ids.length || ids.some(id => !currentDocument.elements.some(element => element.data.id === id))) throw new Error('Provide existing element IDs from queryGraph or analyzeGraph.')
+        if (!ids.length || ids.some(id => !doc.elements.some(element => element.data.id === id))) throw new Error('Provide existing element IDs from queryGraph or analyzeGraph.')
         selectElements(ids)
-        if (input.action === 'focus') changeExploreView({ ...view, focusIds: ids })
-        else if (input.action === 'exclude') changeExploreView({ ...view, hiddenIds: [...new Set([...view.hiddenIds, ...ids])] })
+        if (input.action === 'focus') changeExploreView({ ...viewRef.current, focusIds: ids })
+        else if (input.action === 'exclude') changeExploreView({ ...viewRef.current, hiddenIds: [...new Set([...viewRef.current.hiddenIds, ...ids])] })
         else if (input.action !== 'select') throw new Error('Choose select, focus, exclude, reset, or openView.')
         return `${input.action}: ${ids.join(', ')}. Document data unchanged.`
       },
       saveGraphView: (name, caption) => { saveView(name, caption); return `Saved view ${name}.` },
-      applyGraphPalette: () => onPropose('Apply measured category palette', graphPalettePlan(currentDocument).commands),
-      createGraph: async document => { const base = currentDocument; const next = document.elements.length ? await prepareLayout(document, document.layout) : document; if (liveDocument.current !== base) throw new Error('The open graph changed while preparing the new graph. Try again.'); await onCreateGraph(next); return JSON.stringify({ status: 'created', title: document.title, message: 'Opened as a separate graph; the previous document is preserved. Autosave is scheduled. Verify with getGraphContext and saveGraph.' }) },
+      applyGraphPalette: () => onPropose('Apply measured category palette', graphPalettePlan(readLiveDocument()).commands),
+      createGraph: async document => {
+        const base = readLiveDocument()
+        const next = document.elements.length ? await prepareLayout(document, document.layout) : document
+        if (readLiveDocument() !== base) throw new Error('The open graph changed while preparing the new graph. Try again.')
+        await onCreateGraph(next)
+        liveDocument.current = next
+        proposalRef.current = null
+        documentPathRef.current = null
+        viewRef.current = emptyGraphView()
+        selectionRef.current = []
+        return JSON.stringify({ status: 'created', title: document.title, message: 'Opened as a separate graph; the previous document is preserved. Autosave is scheduled. Verify with getGraphContext and saveGraph.' })
+      },
       proposeGraph: prepareProposal,
       addEdge: async input => onPropose('Add an edge', [{ type: 'add', elements: [{ group: 'edges', data: { ...input, id: input.id || `e${crypto.randomUUID()}`, label: input.label ?? '' } }] }]),
       addNode: async input => { const id = input.id || `n${crypto.randomUUID()}`; return onPropose('Add a node', [{ type: 'add', elements: [{ group: 'nodes', data: { ...input, id, label: input.label ?? id } }] }]) },
       saveGraph,
       exportGraph,
       fit,
-      getContext: () => ({ ...graphContext(), views: currentDocument.views?.map(({ id, name, caption }) => ({ id, name, caption })), view, pendingProposalNote: 'Proposals are preserved per document. Apply by ID only when authorized; do not repeat blocked mutations.', pendingProposal: proposal ? { id: proposal.id, title: proposal.title, impact: proposal.impact } : null }),
-      applyGraphProposal: async id => { onApplyProposal(id); return JSON.stringify({ status: 'applied', proposalId: id, message: 'Applied as one undoable edit. Autosave is scheduled; call getGraphContext to verify, then saveGraph if a saved artifact is needed.' }) },
-      discardGraphProposal: async id => { onDiscardProposal(id); return JSON.stringify({ status: 'discarded', proposalId: id }) },
+      getContext: () => {
+        const doc = readLiveDocument()
+        const activeProposal = readLiveProposal()
+        return { ...graphContext(), views: doc.views?.map(({ id, name, caption }) => ({ id, name, caption })), view: viewRef.current, pendingProposalNote: 'Proposals are preserved per document. Apply by ID only when authorized; do not repeat blocked mutations.', pendingProposal: activeProposal ? { id: activeProposal.id, title: activeProposal.title, impact: activeProposal.impact } : null }
+      },
+      getDocument: readLiveDocument,
+      applyGraphProposal: async id => { onApplyProposal(id); proposalRef.current = null; return JSON.stringify({ status: 'applied', proposalId: id, message: 'Applied as one undoable edit. Autosave is scheduled; call getGraphContext to verify, then saveGraph if a saved artifact is needed.' }) },
+      discardGraphProposal: async id => { onDiscardProposal(id); proposalRef.current = null; return JSON.stringify({ status: 'discarded', proposalId: id }) },
       loadGraph: async (elements, _source, options) => {
-        if (liveDocument.current !== currentDocument) throw new Error('The open document changed while reading the file. Try again in the intended document.');
-        if (currentDocument.elements.length && !options.replace) throw new GraphToolError('Use replace: true to propose replacing this graph.')
+        const doc = readLiveDocument()
+        if (doc !== currentDocument) throw new Error('The open document changed while reading the file. Try again in the intended document.');
+        if (doc.elements.length && !options.replace) throw new GraphToolError('Use replace: true to propose replacing this graph.')
         return onPropose('Replace graph data', [{ type: 'replace', elements }])
       },
       loadSample: loadSampleById,
@@ -1240,8 +1286,9 @@ export function GraphWorkspace({
       setStyle: async style => onPropose('Change graph style', [{ type: 'style', style }]),
     }
   }, [
-    view, saveView, openView, changeExploreView, selectElements, prepareLayout, prepareProposal,
-    onCreateGraph, onPropose, onApplyProposal, onDiscardProposal, proposal, currentDocument,
+    saveView, openView, changeExploreView, selectElements, prepareLayout, prepareProposal,
+    onCreateGraph, onPropose, onApplyProposal, onDiscardProposal, currentDocument,
+    readLiveDocument, readLiveProposal,
     cyReady,
     saveGraph,
     exportGraph,

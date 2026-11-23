@@ -12,6 +12,8 @@ import {
   type GraphLayoutName,
   type GraphNodeShape,
 } from '../constants'
+import { prepareNewGraph } from '../lib/createGraph'
+import type { GraphCommand } from '../lib/graphCommands'
 import { parseGraphInput } from '../lib/graphParser'
 import { GraphToolError, type PureGraphAgentContext } from './context'
 
@@ -238,4 +240,105 @@ export async function exportGraphHandler(
       filename: getString(invoke.arguments, 'filename'),
     }),
   )
+}
+
+export async function createGraphHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  return ok(await context.createGraph(prepareNewGraph(invoke.arguments ?? {})))
+}
+
+export async function proposeGraphHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  const title = invoke.arguments?.title
+  const commands = invoke.arguments?.commands
+  if (typeof title !== 'string' || !Array.isArray(commands)) {
+    throw new GraphToolError('Provide title and commands for the proposal.')
+  }
+  return ok(await context.proposeGraph(title, commands as GraphCommand[]))
+}
+
+export async function applyGraphProposalHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  const id = invoke.arguments?.proposalId
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new GraphToolError(
+      'Provide the proposalId returned by proposeGraph or getGraphContext.',
+    )
+  }
+  return ok(await context.applyGraphProposal(id))
+}
+
+export async function discardGraphProposalHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  const id = invoke.arguments?.proposalId
+  if (typeof id !== 'string' || !id.trim()) {
+    throw new GraphToolError(
+      'Provide the pending proposalId from getGraphContext.',
+    )
+  }
+  return ok(await context.discardGraphProposal(id))
+}
+
+export async function queryGraphHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  return ok(JSON.stringify(context.queryGraph(invoke.arguments ?? {})))
+}
+
+export async function analyzeGraphHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  return ok(
+    JSON.stringify(
+      context.analyzeGraph(
+        (invoke.arguments ?? {}) as Parameters<
+          PureGraphAgentContext['analyzeGraph']
+        >[0],
+      ),
+    ),
+  )
+}
+
+export async function exploreGraphHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  return ok(
+    context.exploreGraph(
+      (invoke.arguments ?? {}) as Parameters<
+        PureGraphAgentContext['exploreGraph']
+      >[0],
+    ),
+  )
+}
+
+export async function saveGraphViewHandler(
+  context: PureGraphAgentContext,
+  invoke: AgentToolInvokeContext,
+): Promise<AgentToolHandlerResult> {
+  if (typeof invoke.arguments?.name !== 'string') {
+    throw new GraphToolError('Provide a name for this view.')
+  }
+  return ok(
+    context.saveGraphView(
+      invoke.arguments.name,
+      String(invoke.arguments.caption ?? ''),
+    ),
+  )
+}
+
+export async function applyGraphPaletteHandler(
+  context: PureGraphAgentContext,
+): Promise<AgentToolHandlerResult> {
+  return ok(context.applyGraphPalette())
 }

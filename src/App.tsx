@@ -344,15 +344,23 @@ function GraphDocumentApp({
     lifecycleRef.current!.markDirty()
   }, [document])
 
+  const getLiveDocument = useCallback(() => documentRef.current, [])
+  const getLiveDocumentPath = useCallback(
+    () => boundPathRef.current ?? lifecycleRef.current?.doc.path ?? null,
+    [],
+  )
+
   const saveDocument = useCallback(async (throwOnError = false): Promise<string | null> => {
     boundDocumentRef.current = documentRef.current
     const lifecycle = lifecycleRef.current!
     const path = await lifecycle.ensureDraft()
     if (!path) return null
+    boundPathRef.current = path
+    session.bindKey(path)
     await lifecycle.flush({ throwOnError })
     if (!compactRef.current) await updateGraphSettings({ packagePath: path })
     return path
-  }, [])
+  }, [session.bindKey])
 
   const moveHistory = useCallback((direction: 'undo' | 'redo') => {
     const next = session.move(direction)
@@ -437,6 +445,9 @@ function GraphDocumentApp({
         onUndo={() => moveHistory('undo')}
         onRedo={() => moveHistory('redo')}
         currentDocument={document}
+        getLiveDocument={getLiveDocument}
+        getLiveProposal={session.getProposal}
+        getLiveDocumentPath={getLiveDocumentPath}
         documentPath={lifecycle.doc.path}
         documentTitle={document.title || DEFAULT_GRAPH_TITLE}
         loadedDocument={loadedDocument}
